@@ -1,0 +1,16 @@
+//
+// Created by lbw on 25-5-4.
+//
+
+#ifndef DATA_CENTER_COMMON_H
+#define DATA_CENTER_COMMON_H
+#include <rm_interfaces/msg/enemy_positions.hpp>
+namespace ckyf
+{
+    namespace data_center
+    {
+        using EnemyPosition = rm_interfaces::msg::EnemyPosition;
+        using EnemyPositions = rm_interfaces::msg::EnemyPositions;
+    }
+}
+#endif //DATA_CENTER_COMMON_H

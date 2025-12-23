@@ -1,0 +1,6 @@
+std_msgs/Header header
+EnemyPositions all_enemy
+---
+int8 err_code #0：一切正常
+string id
+EnemyPosition position
