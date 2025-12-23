@@ -4,7 +4,6 @@
 // std
 #include <tuple>
 #include <numeric>
-#include <mutex>
 
 // ros
 #include <rm_interfaces/msg/target.hpp>
@@ -45,7 +44,6 @@ namespace ckyf
             std::tuple<double, double, double> cal_armor_xyz(const size_t idx) const;
             std::tuple<double, double, double, double> cal_armor_xyza(const size_t idx) const;
         private:
-            std::mutex m_mutex;
             size_t m_armor_num;
             bool m_has_target;
             Eigen::VectorXd m_X;

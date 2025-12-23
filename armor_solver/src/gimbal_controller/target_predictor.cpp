@@ -16,26 +16,10 @@ namespace ckyf::auto_aim
 
 
     void TargetPredictor::predict(double dt) {
-        std::lock_guard<std::mutex> lock(m_mutex);  // 多线程保护
-
-        // 状态转移矩阵F（11x11）
-        Eigen::MatrixXd F{
-                {1, dt, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-                {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-                {0, 0, 1, dt, 0, 0, 0, 0, 0, 0, 0},
-                {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
-                {0, 0, 0, 0, 1, dt, 0, 0, 0, 0, 0},
-                {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
-                {0, 0, 0, 0, 0, 0, 1, dt, 0, 0, 0},
-                {0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
-                {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
-                {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0},
-                {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-        };
-
-        // clang-format on;
-
-        m_X = F * m_X;
+        m_X[0] += dt * m_X[1];
+        m_X[2] += dt * m_X[3];
+        m_X[4] += dt * m_X[5];
+        m_X[6] += dt * m_X[7];
         m_X[6] = limit_rad(m_X[6]);
     }
 
@@ -71,22 +55,32 @@ namespace ckyf::auto_aim
             double y = target.position.y;
             double z = target.position.z;
 
+            double v_x = target.velocity.x;
+            double v_y = target.velocity.y;
+            double v_z = target.velocity.z;
+
             double yaw = target.yaw;
+
+            double v_yaw = target.v_yaw;
 
             double radius = target.radius_2;
 
             m_armor_num = static_cast<size_t>(target.armors_num);
+
+            double l = target.radius_2 - target.radius_1;
+            double h = target.d_height;
 
             // x vx y vy z vz a w r l h
             // a: angle
             // w: angular velocity
             // l: r2 - r1
             // h: z2 - z1
-            Eigen::VectorXd X0{ {x, 0, y, 0, z, 0, yaw, 0, radius, 0, 0} };  //初始化预测量
+            Eigen::VectorXd X0{ {x, v_x, y, v_y, z, v_z, yaw, v_yaw, radius, l, h} };  //初始化预测量
             m_X = X0;
 
             m_has_target = true;
-        }catch (const std::exception& e) {
+        }
+        catch (const std::exception& e) {
             std::cerr << e.what() << std::endl;
             return false;
         }
