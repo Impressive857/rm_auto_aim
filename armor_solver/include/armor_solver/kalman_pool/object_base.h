@@ -22,7 +22,6 @@ public:
     virtual rm_interfaces::msg::Measurement update(rm_interfaces::msg::Armors& same_num_armors) = 0;
     [[nodiscard]] virtual rm_interfaces::msg::Target getState() = 0;
     [[nodiscard]] virtual rm_interfaces::msg::Target predict() = 0;
-    [[nodiscard]] virtual rm_interfaces::msg::Target predict(double dt_) = 0;
 
     bool isDetectTracking();
 

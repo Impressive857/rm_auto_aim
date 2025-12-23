@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(armor_solver)
 
+#set(CMAKE_BUILD_TYPE Debug)
+
 ## Use C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

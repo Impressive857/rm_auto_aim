@@ -63,7 +63,7 @@ void ckyf::auto_aim::TargetAdviser::updateShootTarget()
         shoot_target_.id = extern_target_advice_.id;
         shoot_target_.has_target = extern_target_advice_.has_target_advice;
     }
-    if (!armor_group_.temp_lost_group.empty())//
+    if (!armor_group_.temp_lost_group.empty())
     {
         return;
     }
@@ -100,11 +100,13 @@ void ckyf::auto_aim::TargetAdviser::init()
 void ckyf::auto_aim::TargetAdviser::lock()
 {
     target_lock_ = true;
+    advice_state = AdviceState::Lock;
 }
 
 void ckyf::auto_aim::TargetAdviser::unlock()
 {
     target_lock_ = false;
+    advice_state = AdviceState::MinDistance;
 }
 
 void ckyf::auto_aim::TargetAdviser::putExternAdvice(const TargetAdvice& advice)

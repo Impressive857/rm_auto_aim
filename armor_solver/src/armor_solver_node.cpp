@@ -7,6 +7,7 @@
 #include <data_center/data_recorder.h>
 #include <parameter/parameter.h>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <rm_utils/common.hpp>
 using namespace std::chrono_literals;
 
 ckyf::auto_aim::ArmorSolverNode::ArmorSolverNode(const rclcpp::NodeOptions& options)
@@ -70,8 +71,19 @@ ckyf::auto_aim::ArmorSolverNode::ArmorSolverNode(const rclcpp::NodeOptions& opti
                                                               return this->SetModeCallback(req, res);
                                                           });
 
+        //右键锁
+        operator_sub_ = this->create_subscription<Operator>("serial/mouse",
+                                                            rclcpp::SensorDataQoS(),
+                                                            std::bind(&ArmorSolverNode::OperatorCallback,
+                                                                      this, std::placeholders::_1));
+
         set_params_handle_ = this->add_on_set_parameters_callback(
             std::bind(&ArmorSolverNode::onSetParamsCallback, this, std::placeholders::_1));
+
+        global_node::Parameter->get_parameter("depth_compensation.k", depth_compensation_k_);
+        global_node::Parameter->get_parameter("depth_compensation.b", depth_compensation_b_);
+        global_node::Parameter->get_parameter("height_compensation.k", height_compensation_k_);
+        global_node::Parameter->get_parameter("height_compensation.b", height_compensation_b_);
         FYT_INFO("armor_solver", "ArmorSolverNode Started");
     });
     init.detach();
@@ -122,6 +134,7 @@ void ckyf::auto_aim::ArmorSolverNode::initController()
     global_node::Parameter->get_parameter("solver.prediction_delay", controller_delay_.prediction_delay);
     global_node::Parameter->get_parameter("solver.response_delay", controller_delay_.response_delay);
     global_node::Parameter->get_parameter("solver.trigger_delay", controller_delay_.trigger_delay);
+    global_node::Parameter->get_parameter("solver.command_delay", controller_delay_.command_delay);
     global_node::Parameter->get_parameter("horizontal_offset", input_offset.h);
     global_node::Parameter->get_parameter("vertical_offset", input_offset.v);
     global_node::Parameter->get_parameter<std::vector<std::string>>("solver.angle_offset", input_offset.angle_str);
@@ -132,6 +145,8 @@ void ckyf::auto_aim::ArmorSolverNode::initController()
     input_threshold.transfer_thresh = 5;
     global_node::Parameter->get_parameter("solver.shooting_range_width", input_threshold.shooting_range_h);
     global_node::Parameter->get_parameter("solver.shooting_range_height", input_threshold.shooting_range_w);
+    global_node::Parameter->get_parameter("solver.shooting_range_large_width", input_threshold.shooting_range_large_w);
+    global_node::Parameter->get_parameter("solver.shooting_range_large_height", input_threshold.shooting_range_large_h);
     controller_->setDelay(controller_delay_);
     controller_->setOffset(input_offset);
     controller_->setThreshold(input_threshold);
@@ -221,10 +236,16 @@ void ckyf::auto_aim::ArmorSolverNode::ArmorsCallback(const Armors::SharedPtr& ar
                                double depth = sqrt(
                                    armor.pose.position.x * armor.pose.position.x +
                                    armor.pose.position.y * armor.pose.position.y);
-                               double k = 0.054371 * depth - 0.048;
+                               // double k = 0.214371 * depth - 0.048; //腿轮
+                               // double k = 0.054371 * depth - 0.048;//全向
                                // double k = 0; //TODO 涉及模拟器时需要取消深度补偿
-                               armor.pose.position.x -= k * yaw * yaw * std::cos(theta);
-                               armor.pose.position.y -= k * yaw * yaw * std::sin(theta);
+                               double k_d = depth_compensation_k_ * depth + depth_compensation_b_;
+                               armor.pose.position.x -= k_d * yaw * yaw * std::cos(theta);
+                               armor.pose.position.y -= k_d * yaw * yaw * std::sin(theta);
+
+
+                               double k_h = height_compensation_k_ * depth + height_compensation_b_;
+                               armor.pose.position.z += k_h * yaw * yaw;
                                armor.yaw_in_camera = yaw;
                            }
                            catch (const tf2::TransformException& ex)
@@ -401,25 +422,40 @@ void ckyf::auto_aim::ArmorSolverNode::push_kalman(ArmorGroup& armors_groups, std
 
 void ckyf::auto_aim::ArmorSolverNode::SetModeCallback(SetMode::Request::SharedPtr req, SetMode::Response::SharedPtr res)
 {
-    switch (req->mode)
+    res->success = true;
+    res->message = "0";
+
+    fyt::VisionMode mode = static_cast<fyt::VisionMode>(req->mode);
+    std::string mode_name = visionModeToString(mode);
+    if (mode_name == "UNKNOWN")
     {
-    case 0: /*!自瞄红*/
-    case 2: /*!小符红*/
-    case 4: /*!大符红*/
-        detect_mode_ = RED;
-        res->success = true;
-        break;
-    case 1: /*!自瞄蓝*/
-    case 3: /*!小符蓝*/
-    case 5: /*!大符蓝*/
-        detect_mode_ = BLUE;
-        res->success = true;
-        break;
-    default:
-        res->success = false;
-        res->message = std::string("[ERROR]Unknown DetectMode");
-        break;
+        FYT_ERROR("armor_solver", "Invalid mode: {}", req->mode);
+        return;
     }
+
+    switch (mode)
+    {
+    case fyt::VisionMode::AUTO_AIM_RED:
+    case fyt::VisionMode::AUTO_AIM_BLUE:
+        {
+            controller_timer_ = this->create_wall_timer(std::chrono::milliseconds(5),
+                                                        std::bind(&ArmorSolverNode::ControllerTimerCallback, this)
+                                                        , subscription_callback_group_);
+            operator_sub_ = this->create_subscription<Operator>("serial/mouse",
+                                                                rclcpp::SensorDataQoS(),
+                                                                std::bind(&ArmorSolverNode::OperatorCallback,
+                                                                          this,
+                                                                          std::placeholders::_1));
+            break;
+        }
+    default:
+        {
+            controller_timer_.reset();
+            operator_sub_.reset();
+        }
+    }
+
+    FYT_WARN("armor_solver", "Set mode to {}", mode_name);
 }
 
 rcl_interfaces::msg::SetParametersResult ckyf::auto_aim::ArmorSolverNode::onSetParamsCallback(
@@ -449,9 +485,41 @@ rcl_interfaces::msg::SetParametersResult ckyf::auto_aim::ArmorSolverNode::onSetP
             controller_delay_.trigger_delay = param.as_double();
             controller_->setDelay(controller_delay_);
         }
+        else if (param.get_name() == "depth_compensation.k")
+        {
+            depth_compensation_k_ = param.as_double();
+            FYT_DEBUG("armor_solver", "New Depth-Compensation K:{}", depth_compensation_k_);
+        }
+        else if (param.get_name() == "depth_compensation.b")
+        {
+            depth_compensation_b_ = param.as_double();
+            FYT_DEBUG("armor_solver", "New Depth-Compensation B:{}", depth_compensation_b_);
+        }
+        else if (param.get_name() == "height_compensation.k")
+        {
+            depth_compensation_k_ = param.as_double();
+            FYT_DEBUG("armor_solver", "New Height-Compensation K:{}", height_compensation_k_);
+        }
+        else if (param.get_name() == "height_compensation.b")
+        {
+            depth_compensation_b_ = param.as_double();
+            FYT_DEBUG("armor_solver", "New Height-Compensation B:{}", height_compensation_b_);
+        }
     }
 
     return result; // 返回校验结果
+}
+
+void ckyf::auto_aim::ArmorSolverNode::OperatorCallback(Operator msg)
+{
+    if (msg.right_press)
+    {
+        TargetAdviser::getInstance()->lock();
+    }
+    else
+    {
+        TargetAdviser::getInstance()->unlock();
+    }
 }
 
 bool ckyf::auto_aim::ArmorSolverNode::is_valid_id(const std::string& id) const

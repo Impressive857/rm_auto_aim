@@ -1,41 +1,42 @@
-#include "gimbal_controller/target_predictor.hpp"
+#include "armor_solver/gimbal_controller/target_predictor.hpp"
+
+#include <iostream>
 
 namespace ckyf::auto_aim
 {
     TargetPredictor::TargetPredictor() {
         m_has_target = false;
+        m_armor_num = 0;
+        m_X = Eigen::VectorXd::Zero(11);
     }
 
     TargetPredictor::TargetPredictor(const rm_interfaces::msg::Target& target) {
         set_target(target);
     }
 
+
     void TargetPredictor::predict(double dt) {
-        // 状态转移矩阵
-      // clang-format off
+        std::lock_guard<std::mutex> lock(m_mutex);  // 多线程保护
+
+        // 状态转移矩阵F（11x11）
         Eigen::MatrixXd F{
-          {1, dt,  0,  0,  0,  0,  0,  0,  0, 0, 0},
-          {0,  1,  0,  0,  0,  0,  0,  0,  0, 0, 0},
-          {0,  0,  1, dt,  0,  0,  0,  0,  0, 0, 0},
-          {0,  0,  0,  1,  0,  0,  0,  0,  0, 0, 0},
-          {0,  0,  0,  0,  1, dt,  0,  0,  0, 0, 0},
-          {0,  0,  0,  0,  0,  1,  0,  0,  0, 0, 0},
-          {0,  0,  0,  0,  0,  0,  1, dt,  0, 0, 0},
-          {0,  0,  0,  0,  0,  0,  0,  1,  0, 0, 0},
-          {0,  0,  0,  0,  0,  0,  0,  0,  1, 0, 0},
-          {0,  0,  0,  0,  0,  0,  0,  0,  0, 1, 0},
-          {0,  0,  0,  0,  0,  0,  0,  0,  0, 0, 1}
+                {1, dt, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                {0, 0, 1, dt, 0, 0, 0, 0, 0, 0, 0},
+                {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+                {0, 0, 0, 0, 1, dt, 0, 0, 0, 0, 0},
+                {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
+                {0, 0, 0, 0, 0, 0, 1, dt, 0, 0, 0},
+                {0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+                {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+                {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0},
+                {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
         };
-        // clang-format on
 
-        // 防止夹角求和出现异常值
-        auto f = [&](const Eigen::VectorXd& x) -> Eigen::VectorXd {
-            Eigen::VectorXd x_prior = F * x;
-            x_prior[6] = limit_rad(x_prior[6]);
-            return x_prior;
-            };
+        // clang-format on;
 
-        m_X = f(m_X);
+        m_X = F * m_X;
+        m_X[6] = limit_rad(m_X[6]);
     }
 
     std::tuple<double, double, double> TargetPredictor::target_xyz() const {
@@ -65,46 +66,42 @@ namespace ckyf::auto_aim
     }
 
     bool TargetPredictor::set_target(const rm_interfaces::msg::Target& target) {
-        double x = target.position.x;
-        double y = target.position.y;
-        double z = target.position.z;
+        try {
+            double x = target.position.x;
+            double y = target.position.y;
+            double z = target.position.z;
 
-        double yaw = target.yaw;
-        double v_yaw = target.v_yaw;
+            double yaw = target.yaw;
 
-        double radius = target.radius_2;
+            double radius = target.radius_2;
 
-        m_armor_num = target.armors_num;
+            m_armor_num = static_cast<size_t>(target.armors_num);
 
-        double l = target.radius_2 - target.radius_1;
-        double h = target.d_height;
+            // x vx y vy z vz a w r l h
+            // a: angle
+            // w: angular velocity
+            // l: r2 - r1
+            // h: z2 - z1
+            Eigen::VectorXd X0{ {x, 0, y, 0, z, 0, yaw, 0, radius, 0, 0} };  //初始化预测量
+            m_X = X0;
 
-        // x vx y vy z vz a w r l h
-        // a: angle
-        // w: angular velocity
-        // l: r2 - r1
-        // h: z2 - z1
-        Eigen::VectorXd X0{ {x, 0, y, 0, z, 0, yaw, v_yaw, radius, l, h} };  //初始化预测量
-        m_X = X0;
+            m_has_target = true;
+        }catch (const std::exception& e) {
+            std::cerr << e.what() << std::endl;
+            return false;
+        }
 
-        m_I = Eigen::MatrixXd::Identity(X0.rows(), X0.rows());
-
-        Eigen::VectorXd P_dig{ {0, 0, 0, 0, 0, 0, 0, 0, 0} };
-        m_P = P_dig.asDiagonal();
-
-        m_has_target = true;
+        return true;
     }
 
     std::tuple<double, double, double, double> TargetPredictor::cal_armor_xyza(const size_t idx) const {
         double yaw = limit_rad(m_X[6] + idx * 2 * PI / m_armor_num);
-
-        auto use_l_h = (m_armor_num == 4) && (idx == 1 || idx == 3);
+        int use_l_h = (m_armor_num == 4) && (idx == 1 || idx == 3);
 
         double r = (use_l_h) ? m_X[8] + m_X[9] : m_X[8];
         double x = m_X[0] - r * std::cos(yaw);
         double y = m_X[2] - r * std::sin(yaw);
         double z = (use_l_h) ? m_X[4] + m_X[10] : m_X[4];
-
         return { x, y, z, yaw };
     }
 

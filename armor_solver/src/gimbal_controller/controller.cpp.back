@@ -6,14 +6,14 @@
 #include "visualization/visualization.h"
 #include <parameter/parameter.h>
 #include <clock/clock.h>
-
+#include "armor_solver/tinympc/tiny_api.hpp"
 #include <data_center/data_recorder.h>
 #include <spdlog/common.h>
 using namespace std::chrono_literals;
 
 namespace ckyf::auto_aim
 {
-    Controller::Controller(): state()
+    Controller::Controller() : state()
     {
         tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(global_node::Clock->get_clock());
         tf2_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf2_buffer_);
@@ -48,7 +48,8 @@ namespace ckyf::auto_aim
         setup_pitch_solver();
     }
 
-    void Controller::setup_yaw_solver()
+
+void Controller::setup_yaw_solver()
     {
         auto max_yaw_acc = 50;
         Eigen::MatrixXd A{{1, DT}, {0, 1}};
@@ -65,10 +66,10 @@ namespace ckyf::auto_aim
         tiny_set_bound_constraints(yaw_solver_, x_min, x_max, u_min, u_max);
 
         yaw_solver_->settings->max_iter = 10;
-    }
+}
 
-    void Controller::setup_pitch_solver()
-    {
+void Controller::setup_pitch_solver()
+{
         auto max_pitch_acc = 100;
         Eigen::MatrixXd A{{1, DT}, {0, 1}};
         Eigen::MatrixXd B{{0}, {DT}};
@@ -84,7 +85,8 @@ namespace ckyf::auto_aim
         tiny_set_bound_constraints(pitch_solver_, x_min, x_max, u_min, u_max);
 
         pitch_solver_->settings->max_iter = 10;
-    }
+}
+
     void Controller::setOffset(const Offset& offset)
     {
         offset_ = offset;
@@ -119,12 +121,13 @@ namespace ckyf::auto_aim
         }
 
         target_ = kalman_pool_->predict(target_id);
-        target_predictor_.set_target(target_);
         target_.header.frame_id = target_frame_;
         target_.header.stamp = global_node::Clock->time();
         //发送target和measurement
+        target_predictor_.set_target(target_);
         publish_target_(target_);
         kalman_pool_->measurements[target_.id].header = target_.header;
+        //FYT_INFO("armor_solver", "tj_yaw : {:.2f}", plan_yaw);
         publish_measurement_(kalman_pool_->measurements[target_.id]);
         global_node::Visualization->debug_target(target_id + " [Shoot]");
         global_node::Visualization->debug_target_marker(target_);
@@ -171,12 +174,10 @@ namespace ckyf::auto_aim
         double delay = duration.seconds() + delay_.prediction_delay; //算法
         delay += fly_time; //飞行时间
 
-
         vx = target_.velocity.x;
         vy = target_.velocity.y;
         vz = target_.velocity.z;
         v_yaw = target_.v_yaw;
-
 
         //计算速度样本方差（无偏）
         sigma_vx_.push(vx);
@@ -191,7 +192,6 @@ namespace ckyf::auto_aim
 
         double target_yaw = target_.yaw + v_yaw * delay;
         double delay_tr = delay + delay_.response_delay;
-
 
         target_pos.x() += vx * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.x;
         target_pos.y() += vy * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.y;
@@ -218,14 +218,16 @@ namespace ckyf::auto_aim
         double pre_offset = delay_.command_delay;
 
         auto cmd_armor_position = getBestArmorPositions2(
-            target_pos + v_vec * pre_offset, target_yaw,
-            target_.radius_1, target_.radius_2,
-            target_.d_height,
-            target_.armors_num,
-            delay_.control_delay);
+        target_pos + v_vec * pre_offset, target_yaw,
+        target_.radius_1, target_.radius_2,
+        target_.d_height,
+        target_.armors_num,
+        delay_.control_delay);
 
-        // Calculate cmd_yaw, cmd_pitch
-        double cmd_yaw, cmd_pitch;
+
+        //Calculate cmd_yaw, cmd_pitch
+        // double cmd_yaw= plan_yaw, cmd_pitch=plan_pitch;
+        double cmd_yaw,cmd_pitch;
         calcYawAndPitch(cmd_armor_position, cmd_yaw, cmd_pitch);
 
         // Initialize gimbal_cmd
@@ -237,40 +239,44 @@ namespace ckyf::auto_aim
         double center_yaw, center_pitch;
         calcYawAndPitch(target_pos, center_yaw, center_pitch);
 
+            gimbal_cmd.distance = std::sqrt(
+                target_.position.x * target_.position.x
+                + target_.position.y * target_.position.y
+                + target_.position.z * target_.position.z
+                );
+        double target2d_dist = std::sqrt(target_.position.x * target_.position.x + target_.position.y * target_.position.y);
+            top_ampl_ = 2 * atan2(r, target2d_dist);
 
-        gimbal_cmd.distance = distance;
-        top_ampl_ = 2 * atan2(r, sqrt(target_pos.x() * target_pos.x() + target_pos.y() * target_pos.y()));
+            // Compensate angle by angle_offset_map
+            auto angle_offset = manual_compensator_->angleHardCorrect(target2d_dist, target_.position.z);
 
-        // Compensate angle by angle_offset_map
-        auto angle_offset = manual_compensator_->angleHardCorrect(target_pos.head(2).norm(), target_pos.z());
+            double pitch_offset = angle_offset[0] * M_PI / 180;
+            double yaw_offset = angle_offset[1] * M_PI / 180;
 
-        double pitch_offset = angle_offset[0] * M_PI / 180;
-        double yaw_offset = angle_offset[1] * M_PI / 180;
+            cmd_pitch += pitch_offset;
+            cmd_yaw = angles::normalize_angle(cmd_yaw + yaw_offset);
 
-        cmd_pitch = cmd_pitch + pitch_offset;
-        cmd_yaw = angles::normalize_angle(cmd_yaw + yaw_offset);
+            real_pitch += pitch_offset;
+            real_yaw = angles::normalize_angle(real_yaw + yaw_offset);
 
-        real_pitch = real_pitch + pitch_offset;
-        real_yaw = angles::normalize_angle(real_yaw + yaw_offset);
-
-        center_pitch = center_pitch + pitch_offset;
-        center_yaw = angles::normalize_angle(center_yaw + yaw_offset);
-        double bounder_yaw = center_yaw + 0.5 * top_ampl_;
-        jump_time_ = std::abs(bounder_yaw - rpy_[2]) * top_freq_;
+            center_pitch += pitch_offset;
+            center_yaw = angles::normalize_angle(center_yaw + yaw_offset);
+            double bounder_yaw = center_yaw + 0.5 * top_ampl_;
+            jump_time_ = std::abs(bounder_yaw - rpy_[2]) * top_freq_;
 
 
-        //debug
-        visualization::Offset offset{};
-        offset.distance = target_pos.head(2).norm();
-        offset.height = target_pos.z();
-        offset.pitch_offset = angle_offset[0];
-        offset.yaw_offset = angle_offset[1];
-        global_node::Visualization->debug_offset(offset);
+             //debug
+             visualization::Offset offset{};
+             offset.distance = target_pos.head(2).norm();
+             offset.height = target_pos.z();
+             offset.pitch_offset = angle_offset[0];
+             offset.yaw_offset = angle_offset[1];
+             global_node::Visualization->debug_offset(offset);
 
-        gimbal_cmd.fire_advice = isOnTarget(rpy_[2], rpy_[1], real_yaw, real_pitch, distance);
-        switch (state)
-        {
-        case TRACKING_ARMOR:
+            gimbal_cmd.fire_advice = isOnTarget(rpy_[2], rpy_[1], real_yaw, real_pitch, distance);
+            switch (state)
+            {
+            case TRACKING_ARMOR:
             {
                 if (std::abs(v_yaw) > threshold_.max_tracking_v_yaw)
                 {
@@ -290,7 +296,7 @@ namespace ckyf::auto_aim
                     std::to_string(v_yaw) + "]");
                 break;
             }
-        case TRACKING_CENTER:
+            case TRACKING_CENTER:
             {
                 if (std::abs(v_yaw) < threshold_.min_switching_v_yaw)
                 {
@@ -349,95 +355,96 @@ namespace ckyf::auto_aim
                     std::to_string(v_yaw) + "]");
                 break;
             }
-        }
+            }
 
 
-        gimbal_cmd.yaw = cmd_yaw * 180 / M_PI;
-        gimbal_cmd.pitch = cmd_pitch * 180 / M_PI;
-        auto [plan_yaw,plan_pitch] = get_plan();
-        gimbal_cmd.tj_yaw = plan_yaw;
-        gimbal_cmd.yaw_diff = (cmd_yaw - rpy_[2]) * 180 / M_PI;
-        gimbal_cmd.pitch_diff = (cmd_pitch - rpy_[1]) * 180 / M_PI;
-        real_yaw = real_yaw * 180.0 / M_PI;
-        real_pitch = -real_pitch * 180.0 / M_PI;
-        global_node::Visualization->debug_user.real_pitch = real_pitch;
-        global_node::Visualization->debug_user.real_yaw = real_yaw;
-        global_node::Visualization->debug_user.position_diff = target_.position_diff;
-        if (target_.id == "1")
-        {
-            gimbal_cmd.id = 1;
-        }
-        else if (target_.id == "2")
-        {
-            gimbal_cmd.id = 2;
-        }
-        else if (target_.id == "3")
-        {
-            gimbal_cmd.id = 3;
-        }
-        else if (target_.id == "4")
-        {
-            gimbal_cmd.id = 4;
-        }
-        else if (target_.id == "5")
-        {
-            gimbal_cmd.id = 5;
-        }
-        else if (target_.id == "sentry")
-        {
-            gimbal_cmd.id = 6;
-        }
-        else if (target_.id == "outpost")
-        {
-            gimbal_cmd.id = 7;
-        }
-        else if (target_.id == "base")
-        {
-            gimbal_cmd.id = 8;
-        }
-        else
-        {
-            gimbal_cmd.id = 0;
-        }
+            gimbal_cmd.yaw = cmd_yaw * 180 / M_PI;
+            gimbal_cmd.pitch = cmd_pitch * 180 / M_PI;
+
+            auto[plan_yaw,plan_pitch] = get_plan();
+            gimbal_cmd.tj_yaw=plan_yaw;
+            gimbal_cmd.yaw_diff = (cmd_yaw - rpy_[2]) * 180 / M_PI;
+            gimbal_cmd.pitch_diff = (cmd_pitch - rpy_[1]) * 180 / M_PI;
+            real_yaw = real_yaw * 180.0 / M_PI;
+            real_pitch = -real_pitch * 180.0 / M_PI;
+            global_node::Visualization->debug_user.real_pitch = real_pitch;
+            global_node::Visualization->debug_user.real_yaw = real_yaw;
+            global_node::Visualization->debug_user.position_diff = target_.position_diff;
+            if (target_.id == "1")
+            {
+                gimbal_cmd.id = 1;
+            }
+            else if (target_.id == "2")
+            {
+                gimbal_cmd.id = 2;
+            }
+            else if (target_.id == "3")
+            {
+                gimbal_cmd.id = 3;
+            }
+            else if (target_.id == "4")
+            {
+                gimbal_cmd.id = 4;
+            }
+            else if (target_.id == "5")
+            {
+                gimbal_cmd.id = 5;
+            }
+            else if (target_.id == "sentry")
+            {
+                gimbal_cmd.id = 6;
+            }
+            else if (target_.id == "outpost")
+            {
+                gimbal_cmd.id = 7;
+            }
+            else if (target_.id == "base")
+            {
+                gimbal_cmd.id = 8;
+            }
+            else
+            {
+                gimbal_cmd.id = 0;
+            }
 
 
-        Eigen::Matrix2d R;
-        R << std::cos(rpy_[2]), std::sin(rpy_[2]),
-            -std::sin(rpy_[2]), std::cos(rpy_[2]);
-        Eigen::Vector2d target_velocity_2d;
-        target_velocity_2d << vx, vy;
-        Eigen::Vector2d target_linear_velocity_2d;
-        target_linear_velocity_2d << v_yaw * r * cos(target_yaw), v_yaw * r * sin(target_yaw);
+            Eigen::Matrix2d R;
+            R << std::cos(rpy_[2]), std::sin(rpy_[2]),
+                -std::sin(rpy_[2]), std::cos(rpy_[2]);
+            Eigen::Vector2d target_velocity_2d;
+            target_velocity_2d << vx, vy;
+            Eigen::Vector2d target_linear_velocity_2d;
+            target_linear_velocity_2d << v_yaw * r * cos(target_yaw), v_yaw* r* sin(target_yaw);
 
-        Eigen::Vector2d tangental_velocity_2d = R * (target_velocity_2d + target_linear_velocity_2d);
-        double feed_forward_w_radius = -tangental_velocity_2d(1) / distance;
-        double feed_forward_w_angle = feed_forward_w_radius * 180 / M_PI;
-        gimbal_cmd.top_freq = feed_forward_w_angle; //前馈
-        gimbal_cmd.shoot_freq = 20;
+            Eigen::Vector2d tangental_velocity_2d = R * (target_velocity_2d + target_linear_velocity_2d);
+            double feed_forward_w_radius = -tangental_velocity_2d(1) / distance;
+            double feed_forward_w_angle = feed_forward_w_radius * 180 / M_PI;
+            gimbal_cmd.top_freq = feed_forward_w_angle; //前馈
+            gimbal_cmd.shoot_freq = 20;
 
-        //电控前馈处理
-        gimbal_cmd.top_ampl = top_ampl_;
-        if (
-            std::abs(gimbal_cmd.yaw - last_cmd_yaw_) > 2 ||
-            (gimbal_cmd.jump_time < 5 && gimbal_cmd.jump_time > 0)) //防止丢包，连续发送5帧
-        {
-            gimbal_cmd.jump_time += 1;
-        }
-        else
-        {
-            gimbal_cmd.jump_time = 0;
-        }
-        last_cmd_yaw_ = gimbal_cmd.yaw;
-        publish_GimbalCmd_(gimbal_cmd);
+            //电控前馈处理
+            gimbal_cmd.top_ampl = top_ampl_;
+            if (
+                std::abs(gimbal_cmd.yaw - last_cmd_yaw_) > 2 ||
+                (gimbal_cmd.jump_time < 5 && gimbal_cmd.jump_time > 0)) //防止丢包，连续发送5帧
+            {
+                gimbal_cmd.jump_time += 1;
+            }
+            else
+            {
+                gimbal_cmd.jump_time = 0;
+            }
 
-        global_node::Visualization->debug_shoot_marker(gimbal_cmd.pitch, gimbal_cmd.yaw);
+            publish_GimbalCmd_(gimbal_cmd);
+
+            global_node::Visualization->debug_shoot_marker(gimbal_cmd.pitch, gimbal_cmd.yaw);
     }
 
     bool Controller::isOnTarget(const double cur_yaw,
-                                const double cur_pitch,
-                                const double target_yaw,
-                                const double target_pitch,
-                                const double distance) const noexcept
+        const double cur_pitch,
+        const double target_yaw,
+        const double target_pitch,
+        const double distance) const noexcept
     {
         // Judge whether to shoot
         //double v_coff = std::abs(v_yaw) * 0.01 + 1;
@@ -462,8 +469,8 @@ namespace ckyf::auto_aim
     }
 
     void Controller::calcYawAndPitch(const Eigen::Vector3d& p,
-                                     double& yaw,
-                                     double& pitch) const noexcept
+        double& yaw,
+        double& pitch) const noexcept
     {
         // Calculate yaw and pitch
         yaw = atan2(p.y(), p.x());
@@ -475,12 +482,12 @@ namespace ckyf::auto_aim
     }
 
     Eigen::Vector3d Controller::getBestArmorPositions2(const Eigen::Vector3d& target_center_without_delay,
-                                                       double target_yaw_without_delay,
-                                                       double r1,
-                                                       double r2,
-                                                       double d_height,
-                                                       size_t armors_num,
-                                                       double controller_delay) noexcept
+        double target_yaw_without_delay,
+        double r1,
+        double r2,
+        double d_height,
+        size_t armors_num,
+        double controller_delay) noexcept
     {
         Eigen::Vector3d v(vx, vy, vz);
         Eigen::Vector3d a(target_.acceleration.x, target_.acceleration.y, target_.acceleration.z);
@@ -509,7 +516,7 @@ namespace ckyf::auto_aim
     }
 
     int Controller::getArmorIdWithDelay(const Eigen::Vector3d& target_center, double target_yaw, double r1, double r2,
-                                        double d_height, size_t armors_num) noexcept
+        double d_height, size_t armors_num) noexcept
     {
         auto armor_positions = std::vector<Eigen::Vector3d>(armors_num, Eigen::Vector3d::Zero());
         auto armors_vec = std::vector<Eigen::Vector2d>(armors_num, Eigen::Vector2d::Zero());
@@ -671,7 +678,7 @@ namespace ckyf::auto_aim
 
     Trajectory Controller::get_trajectory(const double yaw0)
     {
-        // double bullet_speed = trajectory_compensator_->velocity;
+        double bullet_speed = trajectory_compensator_->velocity;
 
         Trajectory traj;
         //auto target = kalman_pool_->predict(target_id, time_diff_);
@@ -701,4 +708,3 @@ namespace ckyf::auto_aim
         return traj;
     }
 }
-

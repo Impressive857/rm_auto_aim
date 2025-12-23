@@ -32,37 +32,18 @@ void Observer::init()
     calcAt = [this]()
     {
         dt = get_dt();
-        At << 1, 0, 0, dt, 0, 0, 0.5 * dt * dt, 0, 0,
-            0, 1, 0, 0, dt, 0, 0, 0.5 * dt * dt, 0,
-            0, 0, 1, 0, 0, dt, 0, 0, 0.5 * dt * dt,
-            0, 0, 0, 1, 0, 0, dt, 0, 0,
-            0, 0, 0, 0, 1, 0, 0, dt, 0,
-            0, 0, 0, 0, 0, 1, 0, 0, dt,
-            0, 0, 0, 0, 0, 0, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 1, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 1;
+        At << 1, 0, 0, dt, 0, 0,
+            0, 1, 0, 0, dt, 0,
+            0, 0, 1, 0, 0, dt,
+            0, 0, 0, 1, 0, 0,
+            0, 0, 0, 0, 1, 0,
+            0, 0, 0, 0, 0, 1;
         return At;
     };
-    calcAtt = [this](double dt_)
-    {
-        double dt1 = dt_;
-        Att << 1, 0, 0, dt1, 0, 0, 0, 0, 0, 0,
-            0, 1, 0, 0, dt1, 0, 0, 0, 0, 0,
-            0, 0, 1, 0, 0, dt1, 0, 0, 0, 0,
-            0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 1;
-        return Att;
-    };
-    Att.setIdentity();
     At = calcAt();
-    Ht << 1, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 1, 0, 0, 0, 0, 0, 0;
+    Ht << 1, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0;
     Pt.setIdentity();
     Qt.setIdentity();
     Rt.setIdentity();
@@ -81,7 +62,7 @@ void Observer::setNoise(const Noise& noise)
             0, yaw * dt;
         return Qy;
     };
-    calcRy = [this,noise](const YawZ1& z)
+    calcRy = [this,noise](const YawZ1& z, double yaw_in_camera)
     {
         double a_yaw_ = std::abs(a_yaw);
         double coff = 1;
@@ -118,13 +99,13 @@ void Observer::setNoise(const Noise& noise)
             coff = 0.01;
         }
 
+
         Ry << coff * noise.r_yaw;
         return Ry;
     };
 
     calcQt = [this,noise]()
     {
-        double ax = noise.q_x, ay = noise.q_y, az = noise.q_z;
         double vx = noise.q_x * dt, vy = noise.q_y * dt, vz = noise.q_z * dt;
         double x = vx * dt / 2.0, y = vy * dt / 2.0, z = vz * dt / 2.0;
         // x y z vx vy vz
@@ -140,10 +121,10 @@ void Observer::setNoise(const Noise& noise)
     {
         double x = noise.r_x, y = noise.r_y, z = noise.r_z;
         double v_yaw = x_post_(7);
-        double mu_v_yaw = std::abs(v_yaw) > 1.5 ? 100 : 1;
+        // double mu_v_yaw = std::abs(v_yaw) > 5.0 ? 100 : 1;
         double mu_yaw = yaw_in_camera * yaw_in_camera + 1;
-        double mu_distance = sqrt(x * x + y * y);
-        double mu = mu_v_yaw * mu_yaw * mu_distance;
+        double mu_distance = x * x + y * y;
+        double mu = mu_yaw * mu_distance;
         Rt << x * mu, 0, 0,
             0, y * mu, 0,
             0, 0, z * mu;
@@ -217,18 +198,18 @@ Observer::StateX1 Observer::predictYaw() noexcept
     Py = Ay * Py * Ay.transpose() + Qy;
     StateX1 output = x_pri_;
     output.block(X_T, 0, X_Y, 1) = x;
-
+    Yaw_pri = x;
     return output;
 }
 
-Observer::StateX1 Observer::updateYaw(const YawZ1& z) noexcept
+Observer::StateX1 Observer::updateYaw(const YawZ1& z, double yaw_in_camera) noexcept
 {
     YawX1 x = Yaw_pri;
     double old_v_yaw = x(1);
     Ky = Py * Hy.transpose() * (Hy * Py * Hy.transpose() + Ry).inverse();
     x = x + Ky * (z - Hy * x);
     Py = (Eigen::Matrix<double, X_Y, X_Y>::Identity() - Ky * Hy) * Py;
-    Ry = calcRy(z);
+    Ry = calcRy(z, yaw_in_camera);
     Yaw_pri = x;
     a_yaw = x(1) - old_v_yaw;
     x_post_ = x_pri_;
@@ -245,6 +226,7 @@ Observer::StateX1 Observer::predictTranslate() noexcept
     Pt = At * Pt * At.transpose() + Qt;
     StateX1 output = x_pri_;
     output.block(0, 0, X_T, 1) = x;
+    Translation_pri = x;
     return output;
 }
 
@@ -257,6 +239,7 @@ Observer::StateX1 Observer::updateTranslate(const TranslateZ1& z, double yaw_in_
     Rt = calcRt(z, yaw_in_camera);
     Translation_pri = x;
     x_post_ = x_pri_;
+    global_node::Visualization->debug_user.debug15 = Pt.trace();
     return x_pri_;
 }
 
@@ -284,15 +267,7 @@ Observer::StateX1 Observer::predictState() noexcept
 
     return x_pri_;
 }
-Observer::StateX1 Observer::predictTranslate(double dt_) noexcept
-{
-    Att = calcAtt(dt_);
-    Qs = calcQs();
-    x_pri_ = x_post_;
-    StateX1 x = x_pri_;
-    x = Att * x;
-    return x;
-}
+
 Observer::StateX1 Observer::updateStateSingle(const StateZ1& z) noexcept
 {
     ceres::Jet<double, X_A> x_p_jet[X_A];

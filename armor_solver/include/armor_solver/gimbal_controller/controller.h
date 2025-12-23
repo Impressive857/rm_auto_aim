@@ -15,6 +15,7 @@
 //project
 #include "armor_solver/armor_solver_common.h"
 #include "armor_solver/kalman_pool/kalman_pool.h"
+#include <armor_solver/gimbal_controller/target_predictor.hpp>
 #include <armor_solver/gimbal_controller/target_adviser.h>
 #include <armor_solver/gimbal_controller/controller_tools.h>
 #include "rm_utils/logger/log.hpp"
@@ -31,8 +32,8 @@ namespace ckyf
 {
     namespace auto_aim
     {
-        constexpr double DT = 0.01;
-        constexpr int HALF_HORIZON = 50;
+        constexpr double DT = 0.05;
+        constexpr int HALF_HORIZON = 10;
         constexpr int HORIZON = HALF_HORIZON * 2;
         using Trajectory = Eigen::Matrix<double, 4, HORIZON>;
         class Controller
@@ -66,19 +67,7 @@ namespace ckyf
                 double shooting_range_large_h;
                 double shooting_threshold;
             };
-            struct Plan
-            {
-                bool control;
-                bool fire;
-                float target_yaw;
-                float target_pitch;
-                float yaw;
-                float yaw_vel;
-                float yaw_acc;
-                float pitch;
-                float pitch_vel;
-                float pitch_acc;
-            };
+
             enum State { TRACKING_ARMOR = 0, TRACKING_CENTER = 1 } state;
 
             enum PredictMode
@@ -116,8 +105,6 @@ namespace ckyf
             const double target_distance3d() const;
             double limit_rad(double angle);
 
-            std::optional<std::pair<double, double>> trajectory(double v0, double d, double h);
-
 
             void linkKalmanPool(std::shared_ptr<KalmanPool> kalman_pool) { kalman_pool_ = kalman_pool; }
 
@@ -125,6 +112,7 @@ namespace ckyf
         private:
             std::string target_frame_;
             rm_interfaces::msg::Target target_;
+            ckyf::auto_aim::TargetPredictor target_predictor_;
             std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
             std::unique_ptr<tf2_ros::TransformListener> tf2_listener_;
 
@@ -204,8 +192,9 @@ namespace ckyf
                 double r2,
                 double d_height,
                 size_t armors_num) noexcept;
-            Plan getPlan();
-            Eigen::Matrix<double, 2, 1> aim();
+            std::pair<double, double> get_plan();
+            Eigen::Matrix<double, 2, 1> aim(const std::tuple<double,double,double>& target_xyz);
+            std::optional<std::pair<double, double>> trajectory(const double v0, const double d, const double h);
             Trajectory get_trajectory(const double yaw0);
 
         };

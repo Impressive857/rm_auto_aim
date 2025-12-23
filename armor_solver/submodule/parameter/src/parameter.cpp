@@ -17,11 +17,11 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
     this->declare_parameter("object_id",std::vector<std::string>({
                                        "1", "2", "3", "4", "sentry", "outpost", "base"
                                    }));
-    this->declare_parameter("detect_white",false);
-    this->declare_parameter("imm.high_vlinear",0.5);
-    this->declare_parameter("imm.low_vlinear",0.3);
-    this->declare_parameter("imm.high_w",1.0);
-    this->declare_parameter("imm.low_w",0.4);
+    //深度补偿
+    this->declare_parameter("depth_compensation.k",0.214371);
+    this->declare_parameter("depth_compensation.b",-0.048);
+    this->declare_parameter("height_compensation.k",0.023);
+    this->declare_parameter("height_compensation.b",0.0);
     //声明机器人的后端参数
     //机器人的
     this->declare_parameter("robot.q_x",50.0);
@@ -65,7 +65,7 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
     this->declare_parameter("outpost.r_yaw", 5e-2);
     this->declare_parameter("outpost.max_match_distance", 2.2);
     this->declare_parameter("outpost.max_match_yaw_diff", 1.5);
-    this->declare_parameter("outpost.top_armor_pitch", 1.0);
+    this->declare_parameter("outpost.top_armor_pitch", 0.2);
 
     //声明controller参数
     this->declare_parameter("solver.compensator_type", "ideal");
@@ -78,14 +78,17 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
     this->declare_parameter("solver.controller_delay", 0.02);
     this->declare_parameter("solver.response_delay", 0.02);
     this->declare_parameter("solver.trigger_delay", 0.01);
+    this->declare_parameter("solver.command_delay", 0.01);
     this->declare_parameter("horizontal_offset", 0.0);
     this->declare_parameter("vertical_offset", 0.0);
     this->declare_parameter<std::vector<std::string>>("solver.angle_offset", {"-1.0 10.0 -1.0 10.0 0.0 0.0"});
     this->declare_parameter("solver.max_tracking_v_yaw", 60.0);
     this->declare_parameter("solver.min_switching_v_yaw", 50.0);
     this->declare_parameter("solver.side_angle", 20.0);
-    this->declare_parameter("solver.shooting_range_width", 0.1);
+    this->declare_parameter("solver.shooting_range_width", 0.135);
     this->declare_parameter("solver.shooting_range_height", 0.135);
+    this->declare_parameter("solver.shooting_range_large_width",0.225);
+    this->declare_parameter("solver.shooting_range_large_height",0.135);
 
     this->declare_parameter("solver.shoot_threshold",0.8);//Arc
     this->declare_parameter("solver.shoot_frequency",20.0);

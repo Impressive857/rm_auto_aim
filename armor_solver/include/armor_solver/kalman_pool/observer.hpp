@@ -24,15 +24,9 @@ namespace ObserverFunction
 
       // v_xyz
       // linear velocity
-      x1[0] += x0[3] * dt + 0.5 * x0[6] * dt * dt;
-      x1[1] += x0[4] * dt + 0.5 * x0[7] * dt * dt;
-      x1[2] += x0[5] * dt + 0.5 * x0[8] * dt * dt;
-
-            //a_xyz
-      // acceleration
-      x1[3] += x0[6] * dt;
-      x1[4] += x0[7] * dt;
-      x1[5] += x0[8] * dt;
+      x1[0] += x0[3] * dt;
+      x1[1] += x0[4] * dt;
+      x1[2] += x0[5] * dt;
 
       // v_yaw
       // angular velocity
@@ -49,10 +43,11 @@ namespace ObserverFunction
     template <class T>
     void operator()(const T x[X_N], T z[Z_N])
     {
-      z[0] = x[0] - ceres::cos(x[9]) * x[12];
-      z[1] = x[1] - ceres::sin(x[9]) * x[12];
-      z[2] = x[2] + x[12];
-      z[3] = x[9];
+      z[0] = x[0] - ceres::cos(x[6]) * x[8];
+      z[1] = x[1] - ceres::sin(x[6]) * x[8];
+      z[2] = x[2] + x[9];
+      z[3] = x[6];
+    }
   };
 
   template <int X_N, int Z_N>
@@ -64,9 +59,9 @@ namespace ObserverFunction
       z[0] = x[0];
       z[1] = x[1];
       z[2] = x[2];
-      z[3] = x[9]; //yaw
-      z[4] = x[11]; //r
-      z[5] = x[12]; //dz
+      z[3] = x[6]; //yaw
+      z[4] = x[8]; //r
+      z[5] = x[9]; //dz
     }
   };
 }
@@ -84,11 +79,11 @@ public:
     double q_ro, r_ro;
     double rd_x, rd_y, rd_z, rd_r, rd_dz;
   };
-  
-  static constexpr int X_A = 13; //xc, yc, zc, vxc, vyc, vzc, axc, ayc, azc, yaw, v_yaw, r, d_z;
+
+  static constexpr int X_A = 10; //xc, yc, zc, vxc, vyc, vzc, yaw, v_yaw, r, d_z;
   static constexpr int Z_A = 4; //xa, ya, za, yaw
 
-  static constexpr int X_M = 13; //xc, yc, zc, vxc, vyc, vzc, axc, ayc, azc, yaw, v_yaw, r, d_z;
+  static constexpr int X_M = 10; //xc, yc, zc, vxc, vyc, vzc, yaw, v_yaw, r, d_z;
   static constexpr int Z_M = 6; //xc, yc, zc, yaw, r, dz
 
   static constexpr int X_R = 3; //yaw, v_yaw, r
@@ -97,9 +92,8 @@ public:
   static constexpr int X_Y = 2; //yaw, v_yaw
   static constexpr int Z_Y = 1; //yaw
 
-  static constexpr int X_T = 9; //xc, yc, zc, vxc, vyc, vzc, axc, ayc, azc
+  static constexpr int X_T = 6; //xc, yc, zc, vxc, vyc, vzc
   static constexpr int Z_T = 3; //xc, yc, zc
-
 
   using StateXX = Eigen::Matrix<double, X_A, X_A>;
   using StateX1 = Eigen::Matrix<double, X_A, 1>;
@@ -143,7 +137,7 @@ public:
 
   //yaw的预测
   StateX1 predictYaw() noexcept;
-  StateX1 updateYaw(const YawZ1& z) noexcept;
+  StateX1 updateYaw(const YawZ1& z,double yaw_in_camera) noexcept;
 
   //平移的预测
   StateX1 predictTranslate() noexcept;
@@ -151,7 +145,6 @@ public:
 
   //全部状态量的预测
   StateX1 predictState() noexcept;
-  StateX1 predictTranslate(double dt_) noexcept;
   StateX1 updateStateSingle(const StateZ1& z) noexcept;
   StateX1 updateStateDouble(const StateM1& z) noexcept;
 
@@ -178,8 +171,6 @@ private:
   TranslateXX Qt;
   TranslateZZ Rt;
 
-  StateXX Att;
-  std::function<StateXX(double dt_)> calcAtt;
   //全部状态
   PredictState predict_state;
   MeasureStateSingle measure_state_single;
@@ -201,7 +192,7 @@ private:
 
   //噪声计算
   //yaw
-  std::function<YawZZ(const YawZ1& z)> calcRy;
+  std::function<YawZZ(const YawZ1& z,double yaw_in_camera)> calcRy;
   std::function<YawXX()> calcQy;
   double a_yaw{};
   double a_yaw_switch_count = 0;

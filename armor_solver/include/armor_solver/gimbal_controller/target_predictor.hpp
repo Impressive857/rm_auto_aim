@@ -49,9 +49,7 @@ namespace ckyf
             size_t m_armor_num;
             bool m_has_target;
             Eigen::VectorXd m_X;
-            Eigen::MatrixXd m_P;
-            Eigen::MatrixXd m_I;
-            static const double PI = 3.1415926;
+            const double PI = 3.1415926;
         };
     }
 }

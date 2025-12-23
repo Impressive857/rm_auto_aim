@@ -40,7 +40,6 @@ public:
     //卡尔曼预测
     rm_interfaces::msg::Measurement measure(const std::string& id, rm_interfaces::msg::Armors& same_num_armors);
     rm_interfaces::msg::Target predict(const std::string& id);
-    rm_interfaces::msg::Target predict(const std::string& id, double dt);
     rm_interfaces::msg::Target getState(const std::string& id);
 
     std::map<std::string, rm_interfaces::msg::Measurement> measurements;

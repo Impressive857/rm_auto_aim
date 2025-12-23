@@ -70,17 +70,7 @@ rm_interfaces::msg::Target KalmanPool::predict(const std::string& id)
     target_msg.id = id;
     return target_msg;
 }
-rm_interfaces::msg::Target KalmanPool::predict(const std::string& id,double dt_)
-{
-    const auto& object = tracked_objects_[id];
-    rm_interfaces::msg::Target target_msg;
-    // auto predict = is_detect ? object->getState() : object->predict();
-    target_msg = object->predict(dt_);
-    target_msg.tracking = object->getTrackState() == KalmanCommon::Detect_Tracking ||
-        object->getTrackState() == KalmanCommon::Detect_Temp_Lost;
-    target_msg.id = id;
-    return target_msg;
-}
+
 rm_interfaces::msg::Target KalmanPool::getState(const std::string& id)
 {
     if (isExist(id))

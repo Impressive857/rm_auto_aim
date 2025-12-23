@@ -92,6 +92,10 @@ namespace ckyf
       rclcpp::TimerBase::SharedPtr multi_sensor_timer;
 
       //后端流程
+      double depth_compensation_k_{};
+      double depth_compensation_b_{};
+      double height_compensation_k_{};
+      double height_compensation_b_{};
       void ask_for_target();
       TargetAdvice target_advice_;
       ArmorGroup armor_group_;
@@ -122,6 +126,10 @@ namespace ckyf
 
       rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr set_params_handle_;
       rcl_interfaces::msg::SetParametersResult onSetParamsCallback(const std::vector<rclcpp::Parameter>& params);
+
+      //右键锁
+      rclcpp::Subscription<Operator>::SharedPtr operator_sub_;
+      void OperatorCallback(Operator msg);
     };
 
     inline bool ArmorSolverNode::valid_armor(const rm_interfaces::msg::Armor& armor)

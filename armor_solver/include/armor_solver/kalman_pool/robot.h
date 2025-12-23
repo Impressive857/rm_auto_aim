@@ -117,7 +117,6 @@ namespace Object
         rm_interfaces::msg::Measurement update(rm_interfaces::msg::Armors& same_num_armors) override;
         rm_interfaces::msg::Target getState() override;
         rm_interfaces::msg::Target predict() override;
-        rm_interfaces::msg::Target predict(double dt_) override;
 
         void reset(const rclcpp::Time& time, const rm_interfaces::msg::Armor& armor);
         void resetFromSensor(const geometry_msgs::msg::Pose& pose) override;
@@ -139,6 +138,11 @@ namespace Object
         double max_match_yaw_diff_{};
         double r_avg[2];//0是低板，1是高板
         double r_count;
+        double last_za;
+        double z_c_avg;
+        double z_c_count;
+
+        double position_diff; //更新后的Kalman与更新它的观测的差值，用于评判弹频
 
         bool first_observe; //当前id的车在同一场比赛中第一次被观测到
         bool just_reset; //刚刚重置了状态，等待判断是否半径对应出错
@@ -160,6 +164,7 @@ namespace Object
 
         // To store offset relative to the reference plane
         double d_zc{};
+        double d_height{};
         double last_yaw_ = 0;
     };
 }
