@@ -13,7 +13,7 @@ using namespace std::chrono_literals;
 
 namespace ckyf::auto_aim
 {
-    Controller::Controller(): state()
+    Controller::Controller() : state()
     {
         tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(global_node::Clock->get_clock());
         tf2_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf2_buffer_);
@@ -51,9 +51,9 @@ namespace ckyf::auto_aim
     void Controller::setup_yaw_solver()
     {
         auto max_yaw_acc = 50;
-        Eigen::MatrixXd A{{1, DT}, {0, 1}};
-        Eigen::MatrixXd B{{0}, {DT}};
-        Eigen::VectorXd f{{0, 0}};
+        Eigen::MatrixXd A{ {1, DT}, {0, 1} };
+        Eigen::MatrixXd B{ {0}, {DT} };
+        Eigen::VectorXd f{ {0, 0} };
         Eigen::Matrix<double, 2, 1> Q(9e6, 0.0);
         Eigen::Matrix<double, 1, 1> R(1);
         tiny_setup(&yaw_solver_, A, B, f, Q.asDiagonal(), R.asDiagonal(), 1.0, 2, 1, HORIZON, 0);
@@ -70,10 +70,10 @@ namespace ckyf::auto_aim
     void Controller::setup_pitch_solver()
     {
         auto max_pitch_acc = 100;
-        Eigen::MatrixXd A{{1, DT}, {0, 1}};
-        Eigen::MatrixXd B{{0}, {DT}};
-        Eigen::VectorXd f{{0, 0}};
-        Eigen::Matrix<double, 2, 1> Q(9e6,0);
+        Eigen::MatrixXd A{ {1, DT}, {0, 1} };
+        Eigen::MatrixXd B{ {0}, {DT} };
+        Eigen::VectorXd f{ {0, 0} };
+        Eigen::Matrix<double, 2, 1> Q(9e6, 0);
         Eigen::Matrix<double, 1, 1> R(1);
         tiny_setup(&pitch_solver_, A, B, f, Q.asDiagonal(), R.asDiagonal(), 1.0, 2, 1, HORIZON, 0);
 
@@ -271,90 +271,90 @@ namespace ckyf::auto_aim
         switch (state)
         {
         case TRACKING_ARMOR:
+        {
+            if (std::abs(v_yaw) > threshold_.max_tracking_v_yaw)
             {
-                if (std::abs(v_yaw) > threshold_.max_tracking_v_yaw)
-                {
-                    overflow_count_++;
-                }
-                else
-                {
-                    overflow_count_ = std::max(0, overflow_count_ - 1);
-                }
-
-                if (overflow_count_ > threshold_.transfer_thresh)
-                {
-                    state = TRACKING_CENTER;
-                }
-                global_node::Visualization->debug_tracking_mode(
-                    std::string("tracking_armor") + " [" +
-                    std::to_string(v_yaw) + "]");
-                break;
+                overflow_count_++;
             }
+            else
+            {
+                overflow_count_ = std::max(0, overflow_count_ - 1);
+            }
+
+            if (overflow_count_ > threshold_.transfer_thresh)
+            {
+                state = TRACKING_CENTER;
+            }
+            global_node::Visualization->debug_tracking_mode(
+                std::string("tracking_armor") + " [" +
+                std::to_string(v_yaw) + "]");
+            break;
+        }
         case TRACKING_CENTER:
+        {
+            if (std::abs(v_yaw) < threshold_.min_switching_v_yaw)
             {
-                if (std::abs(v_yaw) < threshold_.min_switching_v_yaw)
-                {
-                    overflow_count_++;
-                }
-                else
-                {
-                    overflow_count_ = std::max(0, overflow_count_ - 1);
-                }
-
-                if (overflow_count_ > threshold_.transfer_thresh)
-                {
-                    state = TRACKING_ARMOR;
-                    overflow_count_ = 0;
-                }
-
-                double temp_yaw, temp_pitch;
-
-                //计算yaw 不添加多余delay
-                calcYawAndPitch(target_pos, cmd_yaw, temp_pitch);
-
-                //计算pitch 添加controller_delay
-                cmd_armor_position = getBestArmorPositions2(target_pos, target_yaw,
-                    target_.radius_1, target_.radius_2,
-                    target_.d_height,
-                    target_.armors_num, delay_.control_delay);
-                calcYawAndPitch(cmd_armor_position, temp_yaw, cmd_pitch);
-
-                //依据角度的cos值判定
-                Eigen::Vector3d target_pos_tracking_center;
-                double target_yaw_tracking_center;
-                target_pos_tracking_center.x() = target_pos.x() + vx * delay_.trigger_delay;
-                target_pos_tracking_center.y() = target_pos.y() + vy * delay_.trigger_delay;
-                target_pos_tracking_center.z() = target_pos.z() + vz * delay_.trigger_delay;
-                target_yaw_tracking_center = target_yaw + v_yaw * delay_.trigger_delay;
-                getBestArmorPositions2(
-                    target_pos_tracking_center, target_yaw_tracking_center,
-                    target_.radius_1, target_.radius_2,
-                    target_.d_height,
-                    target_.armors_num, delay_.trigger_delay);
-                double shoot_angle_window = threshold_.shooting_threshold / (target_.radius_1 + 0.0001);
-                if (cosTheta_ > cos(shoot_angle_window))
-                {
-                    double shoot_time_window = shoot_angle_window / v_yaw;
-                    int shoot_frequency = (int)(wild_coefficient_ * shoot_time_window / (1 / frequency_));
-                    gimbal_cmd.fire_advice = shoot_frequency < 1 ? 1 : shoot_frequency;
-                    gimbal_cmd.fire_advice *= 10;
-                    if (gimbal_cmd.fire_advice > 20)
-                        gimbal_cmd.fire_advice = 20;
-                }
-                else
-                    gimbal_cmd.fire_advice = 0;
-                global_node::Visualization->debug_user.debug17 = cosTheta_;
-                global_node::Visualization->debug_tracking_mode(
-                    std::string("tracking_center") + " [" +
-                    std::to_string(v_yaw) + "]");
-                break;
+                overflow_count_++;
             }
+            else
+            {
+                overflow_count_ = std::max(0, overflow_count_ - 1);
+            }
+
+            if (overflow_count_ > threshold_.transfer_thresh)
+            {
+                state = TRACKING_ARMOR;
+                overflow_count_ = 0;
+            }
+
+            double temp_yaw, temp_pitch;
+
+            //计算yaw 不添加多余delay
+            calcYawAndPitch(target_pos, cmd_yaw, temp_pitch);
+
+            //计算pitch 添加controller_delay
+            cmd_armor_position = getBestArmorPositions2(target_pos, target_yaw,
+                target_.radius_1, target_.radius_2,
+                target_.d_height,
+                target_.armors_num, delay_.control_delay);
+            calcYawAndPitch(cmd_armor_position, temp_yaw, cmd_pitch);
+
+            //依据角度的cos值判定
+            Eigen::Vector3d target_pos_tracking_center;
+            double target_yaw_tracking_center;
+            target_pos_tracking_center.x() = target_pos.x() + vx * delay_.trigger_delay;
+            target_pos_tracking_center.y() = target_pos.y() + vy * delay_.trigger_delay;
+            target_pos_tracking_center.z() = target_pos.z() + vz * delay_.trigger_delay;
+            target_yaw_tracking_center = target_yaw + v_yaw * delay_.trigger_delay;
+            getBestArmorPositions2(
+                target_pos_tracking_center, target_yaw_tracking_center,
+                target_.radius_1, target_.radius_2,
+                target_.d_height,
+                target_.armors_num, delay_.trigger_delay);
+            double shoot_angle_window = threshold_.shooting_threshold / (target_.radius_1 + 0.0001);
+            if (cosTheta_ > cos(shoot_angle_window))
+            {
+                double shoot_time_window = shoot_angle_window / v_yaw;
+                int shoot_frequency = (int)(wild_coefficient_ * shoot_time_window / (1 / frequency_));
+                gimbal_cmd.fire_advice = shoot_frequency < 1 ? 1 : shoot_frequency;
+                gimbal_cmd.fire_advice *= 10;
+                if (gimbal_cmd.fire_advice > 20)
+                    gimbal_cmd.fire_advice = 20;
+            }
+            else
+                gimbal_cmd.fire_advice = 0;
+            global_node::Visualization->debug_user.debug17 = cosTheta_;
+            global_node::Visualization->debug_tracking_mode(
+                std::string("tracking_center") + " [" +
+                std::to_string(v_yaw) + "]");
+            break;
+        }
         }
 
 
         gimbal_cmd.yaw = cmd_yaw * 180 / M_PI;
         gimbal_cmd.pitch = cmd_pitch * 180 / M_PI;
-        auto [plan_yaw,plan_pitch] = get_plan();
+        auto [plan_yaw, plan_pitch] = get_plan();
         gimbal_cmd.tj_yaw = plan_yaw;
         gimbal_cmd.yaw_diff = (cmd_yaw - rpy_[2]) * 180 / M_PI;
         gimbal_cmd.pitch_diff = (cmd_pitch - rpy_[1]) * 180 / M_PI;
@@ -407,7 +407,7 @@ namespace ckyf::auto_aim
         Eigen::Vector2d target_velocity_2d;
         target_velocity_2d << vx, vy;
         Eigen::Vector2d target_linear_velocity_2d;
-        target_linear_velocity_2d << v_yaw * r * cos(target_yaw), v_yaw * r * sin(target_yaw);
+        target_linear_velocity_2d << v_yaw * r * cos(target_yaw), v_yaw* r* sin(target_yaw);
 
         Eigen::Vector2d tangental_velocity_2d = R * (target_velocity_2d + target_linear_velocity_2d);
         double feed_forward_w_radius = -tangental_velocity_2d(1) / distance;
@@ -434,10 +434,10 @@ namespace ckyf::auto_aim
     }
 
     bool Controller::isOnTarget(const double cur_yaw,
-                                const double cur_pitch,
-                                const double target_yaw,
-                                const double target_pitch,
-                                const double distance) const noexcept
+        const double cur_pitch,
+        const double target_yaw,
+        const double target_pitch,
+        const double distance) const noexcept
     {
         // Judge whether to shoot
         //double v_coff = std::abs(v_yaw) * 0.01 + 1;
@@ -462,8 +462,8 @@ namespace ckyf::auto_aim
     }
 
     void Controller::calcYawAndPitch(const Eigen::Vector3d& p,
-                                     double& yaw,
-                                     double& pitch) const noexcept
+        double& yaw,
+        double& pitch) const noexcept
     {
         // Calculate yaw and pitch
         yaw = atan2(p.y(), p.x());
@@ -475,12 +475,12 @@ namespace ckyf::auto_aim
     }
 
     Eigen::Vector3d Controller::getBestArmorPositions2(const Eigen::Vector3d& target_center_without_delay,
-                                                       double target_yaw_without_delay,
-                                                       double r1,
-                                                       double r2,
-                                                       double d_height,
-                                                       size_t armors_num,
-                                                       double controller_delay) noexcept
+        double target_yaw_without_delay,
+        double r1,
+        double r2,
+        double d_height,
+        size_t armors_num,
+        double controller_delay) noexcept
     {
         Eigen::Vector3d v(vx, vy, vz);
         Eigen::Vector3d a(target_.acceleration.x, target_.acceleration.y, target_.acceleration.z);
@@ -509,7 +509,7 @@ namespace ckyf::auto_aim
     }
 
     int Controller::getArmorIdWithDelay(const Eigen::Vector3d& target_center, double target_yaw, double r1, double r2,
-                                        double d_height, size_t armors_num) noexcept
+        double d_height, size_t armors_num) noexcept
     {
         auto armor_positions = std::vector<Eigen::Vector3d>(armors_num, Eigen::Vector3d::Zero());
         auto armors_vec = std::vector<Eigen::Vector2d>(armors_num, Eigen::Vector2d::Zero());
@@ -560,7 +560,7 @@ namespace ckyf::auto_aim
 
         // 1. Predict fly_time
         double dist = target_predictor_.nearest_armor_dist_2d();
-        auto [target_x, target_y,target_z,target_yaw] = target_predictor_.target_xyza();
+        auto [target_x, target_y, target_z, target_yaw] = target_predictor_.target_xyza();
         //FYT_INFO("armor_solver", "dist 2d : {:.2f}", std::sqrt(target_x * target_x + target_y * target_y));
         double bullet_speed = trajectory_compensator_->velocity;
         if (bullet_speed < 10 || bullet_speed > 25) {
@@ -617,7 +617,7 @@ namespace ckyf::auto_aim
         //         traj(0, HALF_HORIZON + shoot_offset_) - yaw_solver_->work->x(0, HALF_HORIZON + shoot_offset_),
         //         traj(2, HALF_HORIZON + shoot_offset_) -
         //         pitch_solver_->work->x(0, HALF_HORIZON + shoot_offset_)) < (1 / frequency_);
-        return {yaw*180.0/M_PI, pitch*180.0/M_PI}; // 同济的yaw和我们是反的
+        return { yaw , pitch};
     }
     double Controller::limit_rad(double angle)
     {
@@ -634,7 +634,7 @@ namespace ckyf::auto_aim
         auto delta = b * b - 4 * a * c;
 
         if (delta < 0) {
-            std::cout<<"d:"<<d<<"v0:"<<v0<<"h:"<<h<<std::endl;
+            std::cout << "d:" << d << "v0:" << v0 << "h:" << h << std::endl;
             return std::nullopt;
         }
 
@@ -648,13 +648,13 @@ namespace ckyf::auto_aim
         double pitch = (t_1 < t_2) ? pitch_1 : pitch_2;
         double fly_time = (t_1 < t_2) ? t_1 : t_2;
 
-        return std::pair<double,double>{ pitch, fly_time };
+        return std::pair<double, double>{ pitch, fly_time };
     }
 
-    Eigen::Matrix<double, 2, 1> Controller::aim(const std::tuple<double,double,double>& target_xyz)
+    Eigen::Matrix<double, 2, 1> Controller::aim(const std::tuple<double, double, double>& target_xyz)
     {
         double bullet_speed = trajectory_compensator_->velocity;
-        auto [x,y,z] = target_xyz;
+        auto [x, y, z] = target_xyz;
         double dist = sqrt(x * x + y * y);
 
         auto azim = std::atan2(y, x);
@@ -670,7 +670,7 @@ namespace ckyf::auto_aim
     Trajectory Controller::get_trajectory(const double yaw0)
     {
         Trajectory traj;
-        
+
         target_predictor_.predict(-DT * (HALF_HORIZON + 1));
         auto armor_xyz = target_predictor_.nearest_armor_xyz();
 
