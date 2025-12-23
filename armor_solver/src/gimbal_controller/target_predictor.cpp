@@ -16,11 +16,28 @@ namespace ckyf::auto_aim
 
 
     void TargetPredictor::predict(double dt) {
-        m_X[0] += dt * m_X[1];
-        m_X[2] += dt * m_X[3];
-        m_X[4] += dt * m_X[5];
-        m_X[6] += dt * m_X[7];
+        Eigen::MatrixXd F{
+            {1, dt,  0,  0,  0,  0,  0,  0,  0,  0,  0},
+            {0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0},
+            {0,  0,  1, dt,  0,  0,  0,  0,  0,  0,  0},
+            {0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0},
+            {0,  0,  0,  0,  1, dt,  0,  0,  0,  0,  0},
+            {0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0},
+            {0,  0,  0,  0,  0,  0,  1, dt,  0,  0,  0},
+            {0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0},
+            {0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0},
+            {0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0},
+            {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1}
+        };
+
+        m_X = F * m_X;
         m_X[6] = limit_rad(m_X[6]);
+
+        // m_X[0] += dt * m_X[1];
+        // m_X[2] += dt * m_X[3];
+        // m_X[4] += dt * m_X[5];
+        // m_X[6] += dt * m_X[7];
+        // m_X[6] = limit_rad(m_X[6]);
     }
 
     std::tuple<double, double, double> TargetPredictor::target_xyz() const {

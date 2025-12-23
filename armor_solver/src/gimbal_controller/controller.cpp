@@ -617,7 +617,7 @@ namespace ckyf::auto_aim
         //         traj(0, HALF_HORIZON + shoot_offset_) - yaw_solver_->work->x(0, HALF_HORIZON + shoot_offset_),
         //         traj(2, HALF_HORIZON + shoot_offset_) -
         //         pitch_solver_->work->x(0, HALF_HORIZON + shoot_offset_)) < (1 / frequency_);
-        return { yaw , pitch};
+        return { yaw * 180.0 / M_PI, pitch * 180.0 / M_PI };
     }
     double Controller::limit_rad(double angle)
     {
