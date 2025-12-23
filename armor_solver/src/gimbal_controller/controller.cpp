@@ -559,9 +559,7 @@ namespace ckyf::auto_aim
     {
 
         // 1. Predict fly_time
-
-        //double dist = std::sqrt(target_.position.x * target_.position.x + target_.position.y * target_.position.y);
-        double dist = target_predictor_.target_dist_2d();
+        double dist = target_predictor_.nearest_armor_dist_2d();
         auto [target_x, target_y,target_z,target_yaw] = target_predictor_.target_xyza();
         //FYT_INFO("armor_solver", "dist 2d : {:.2f}", std::sqrt(target_x * target_x + target_y * target_y));
         double bullet_speed = trajectory_compensator_->velocity;
@@ -575,13 +573,13 @@ namespace ckyf::auto_aim
         }
         auto [bullet_pitch, bullet_fly_time] = *bullet_traj_opt;
         target_predictor_.predict(bullet_fly_time);
-        auto target_xyz = target_predictor_.target_xyz();
+        auto armor_xyz = target_predictor_.nearest_armor_xyz();
 
         // 2. Get trajectory
         double yaw0 = 0;
         Trajectory traj;
         try {
-            yaw0 = aim(target_xyz)(0);
+            yaw0 = aim(armor_xyz)(0);
             traj = get_trajectory(yaw0);
         }
         catch (const std::exception& e) {
@@ -671,10 +669,8 @@ namespace ckyf::auto_aim
 
     Trajectory Controller::get_trajectory(const double yaw0)
     {
-        // double bullet_speed = trajectory_compensator_->velocity;
-
         Trajectory traj;
-        //auto target = kalman_pool_->predict(target_id, time_diff_);
+        
         target_predictor_.predict(-DT * (HALF_HORIZON + 1));
         auto armor_xyz = target_predictor_.nearest_armor_xyz();
 

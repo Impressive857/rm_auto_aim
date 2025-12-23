@@ -89,6 +89,7 @@ namespace ckyf::auto_aim
     }
 
     std::tuple<double, double, double, double> TargetPredictor::cal_armor_xyza(const size_t idx) const {
+        if (0 > m_armor_num) throw std::invalid_argument("armor_num is zero!");
         double yaw = limit_rad(m_X[6] + idx * 2 * PI / m_armor_num);
         int use_l_h = (m_armor_num == 4) && (idx == 1 || idx == 3);
 
