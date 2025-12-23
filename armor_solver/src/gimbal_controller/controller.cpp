@@ -676,7 +676,7 @@ namespace ckyf::auto_aim
 
         auto yaw_pitch_last = aim(armor_xyz);
 
-        target_predictor_.predict(DT * (HALF_HORIZON + 1));  // [0] = -HALF_HORIZON * DT -> [HHALF_HORIZON] = 0
+        target_predictor_.predict(DT);  // [0] = -HALF_HORIZON * DT -> [HHALF_HORIZON] = 0
         armor_xyz = target_predictor_.nearest_armor_xyz();
         auto yaw_pitch = aim(armor_xyz);
 
