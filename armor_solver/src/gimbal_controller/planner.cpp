@@ -146,10 +146,10 @@ namespace ckyf::auto_aim {
 
     Planner::Trajectory Planner::get_trajectory(const double yaw0)
     {
-        Trajectory traj;
-
         const int horizon = std::max(m_current_yaw_horizon, m_current_pitch_horizon);
         const int half_horizon = horizon / 2;
+
+        Trajectory traj = Eigen::MatrixXd::Zero(4, horizon);
 
         m_target_predictor.predict(-DT * (half_horizon + 1));
         auto armor_xyz = m_target_predictor.nearest_armor_xyz();
