@@ -23,10 +23,11 @@ namespace ckyf {
             static constexpr double DT = 0.01;
             static constexpr int MIN_HALF_HORIZON = 50;
             static constexpr int MIN_HORIZON = MIN_HALF_HORIZON * 2;
+            static constexpr int MAX_HORIZON = 200;
             static constexpr double G = 9.7833;
             static constexpr double MAX_PITCH_ACC = 100;
             static constexpr double MAX_YAW_ACC = 100;
-            using Trajectory = Eigen::Matrix<double, 4, MIN_HORIZON>;
+            using Trajectory = Eigen::Matrix<double, 4, -1>;
         public:
             struct Plan {
                 double yaw;
@@ -51,6 +52,8 @@ namespace ckyf {
             TinySolver* m_yaw_solver;
             TinySolver* m_pitch_solver;
             TargetPredictor m_target_predictor;
+            int m_current_yaw_horizon;
+            int m_current_pitch_horizon;
             double m_yaw_offset;
             double m_pitch_offset;
             double m_bullet_speed;

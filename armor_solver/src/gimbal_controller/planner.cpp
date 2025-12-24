@@ -54,23 +54,29 @@ namespace ckyf::auto_aim {
     void Planner::set_yaw_solver_horizon(int horizion) {
         horizion = (0 == horizion % 2) ? horizion : horizion + 1;
         horizion = (horizion > MIN_HORIZON) ? horizion : MIN_HORIZON;
+        horizion = (horizion > MAX_HORIZON) ? MAX_HORIZON : horizion;
 
         Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, horizion, -1e17);
         Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, horizion, 1e17);
         Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, horizion - 1, -MAX_YAW_ACC);
         Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, horizion - 1, MAX_YAW_ACC);
         tiny_set_bound_constraints(m_yaw_solver, x_min, x_max, u_min, u_max);
+
+        m_current_yaw_horizon = horizion;
     }
 
     void Planner::set_pitch_solver_horizon(int horizion) {
         horizion = (0 == horizion % 2) ? horizion : horizion + 1;
         horizion = (horizion > MIN_HORIZON) ? horizion : MIN_HORIZON;
+        horizion = (horizion > MAX_HORIZON) ? MAX_HORIZON : horizion;
 
         Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, horizion, -1e17);
         Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, horizion, 1e17);
         Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, horizion - 1, -MAX_PITCH_ACC);
         Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, horizion - 1, MAX_PITCH_ACC);
         tiny_set_bound_constraints(m_pitch_solver, x_min, x_max, u_min, u_max);
+
+        m_current_pitch_horizon = horizion;
     }
 
     Planner::Plan Planner::get_plan() {
@@ -84,7 +90,9 @@ namespace ckyf::auto_aim {
             return {};
         }
         auto [bullet_pitch, bullet_fly_time] = *bullet_traj_opt;
-        m_target_predictor.predict(bullet_fly_time);
+        const int target_horizon_index = static_cast<int>(bullet_fly_time / DT);
+        set_solver_horizon(target_horizon_index);
+
         auto armor_xyz = m_target_predictor.nearest_armor_xyz();
 
         // 2. Get trajectory
@@ -104,22 +112,22 @@ namespace ckyf::auto_aim {
         x0 << traj(0, 0), traj(1, 0);
         tiny_set_x0(m_yaw_solver, x0);
 
-        m_yaw_solver->work->Xref = traj.block(0, 0, 2, MIN_HORIZON);
+        m_yaw_solver->work->Xref = traj.block(0, 0, 2, m_current_yaw_horizon);
         tiny_solve(m_yaw_solver);
 
         // 4. Solve pitch
         x0 << traj(2, 0), traj(3, 0);
         tiny_set_x0(m_pitch_solver, x0);
 
-        m_pitch_solver->work->Xref = traj.block(2, 0, 2, MIN_HORIZON);
+        m_pitch_solver->work->Xref = traj.block(2, 0, 2, m_current_pitch_horizon);
         tiny_solve(m_pitch_solver);
 
         // plan.target_yaw = limit_rad(traj(0, HALF_HORIZON) + yaw0);
         // plan.target_pitch = traj(2, HALF_HORIZON);
-        double yaw = limit_rad(m_yaw_solver->work->x(0, MIN_HALF_HORIZON) + yaw0);
+        double yaw = limit_rad(m_yaw_solver->work->x(0, target_horizon_index) + yaw0);
         // plan.yaw_vel = yaw_solver_->work->x(1, HALF_HORIZON);
         // plan.yaw_acc = yaw_solver_->work->u(0, HALF_HORIZON);
-        double pitch = m_pitch_solver->work->x(0, MIN_HALF_HORIZON);
+        double pitch = m_pitch_solver->work->x(0, target_horizon_index);
         // plan.pitch_vel = pitch_solver_->work->x(1, HALF_HORIZON);
         // plan.pitch_acc = pitch_solver_->work->u(0, HALF_HORIZON);
 
@@ -140,7 +148,10 @@ namespace ckyf::auto_aim {
     {
         Trajectory traj;
 
-        m_target_predictor.predict(-DT * (MIN_HALF_HORIZON + 1));
+        const int horizon = std::max(m_current_yaw_horizon, m_current_pitch_horizon);
+        const int half_horizon = horizon / 2;
+
+        m_target_predictor.predict(-DT * (half_horizon + 1));
         auto armor_xyz = m_target_predictor.nearest_armor_xyz();
 
         auto [yaw_last, pitch_last] = aim(armor_xyz);
@@ -149,7 +160,7 @@ namespace ckyf::auto_aim {
         armor_xyz = m_target_predictor.nearest_armor_xyz();
         auto [yaw, pitch] = aim(armor_xyz);
 
-        for (int i = 0; i < MIN_HORIZON; i++) {
+        for (int i = 0; i < horizon; i++) {
             m_target_predictor.predict(DT);
             armor_xyz = m_target_predictor.nearest_armor_xyz();
             auto [yaw_next, pitch_next] = aim(armor_xyz);
