@@ -83,7 +83,7 @@ namespace ckyf::auto_aim
         }
 
         target_ = kalman_pool_->predict(target_id);
-        target_predictor_.set_target(target_);
+        m_planner.set_target(target_);
         target_.header.frame_id = target_frame_;
         target_.header.stamp = global_node::Clock->time();
         //发送target和measurement

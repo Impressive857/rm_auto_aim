@@ -15,7 +15,6 @@
 //project
 #include "armor_solver/armor_solver_common.h"
 #include "armor_solver/kalman_pool/kalman_pool.h"
-#include <armor_solver/gimbal_controller/target_predictor.hpp>
 #include <armor_solver/gimbal_controller/target_adviser.h>
 #include <armor_solver/gimbal_controller/controller_tools.h>
 #include "rm_utils/logger/log.hpp"
@@ -102,7 +101,6 @@ namespace ckyf
         private:
             std::string target_frame_;
             rm_interfaces::msg::Target target_;
-            ckyf::auto_aim::TargetPredictor target_predictor_;
             std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
             std::unique_ptr<tf2_ros::TransformListener> tf2_listener_;
 
