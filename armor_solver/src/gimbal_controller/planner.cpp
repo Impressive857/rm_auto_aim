@@ -17,42 +17,53 @@ namespace ckyf::auto_aim {
         global_node::Parameter->get_parameter("solver.bullet_speed", m_bullet_speed);
     }
 
+    bool Planner::set_target(const rm_interfaces::msg::Target& target) {
+        return m_target_predictor.set_target(target);
+    }
+
     void Planner::setup_yaw_solver()
     {
-        auto max_yaw_acc = 50;
-        Eigen::MatrixXd A{ {1, DT}, {0, 1} };
-        Eigen::MatrixXd B{ {0}, {DT} };
-        Eigen::VectorXd f{ {0, 0} };
-        Eigen::Matrix<double, 2, 1> Q(9e6, 0.0);
-        Eigen::Matrix<double, 1, 1> R(1);
-        tiny_setup(&m_yaw_solver, A, B, f, Q.asDiagonal(), R.asDiagonal(), 1.0, 2, 1, HORIZON, 0);
-
-        Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, HORIZON, -1e17);
-        Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, HORIZON, 1e17);
-        Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, HORIZON - 1, -max_yaw_acc);
-        Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, HORIZON - 1, max_yaw_acc);
-        tiny_set_bound_constraints(m_yaw_solver, x_min, x_max, u_min, u_max);
+        tiny_setup(&m_yaw_solver, m_A, m_B, m_f, m_Q.asDiagonal(), m_R.asDiagonal(), 1.0, 2, 1, MIN_HORIZON, 0);
 
         m_yaw_solver->settings->max_iter = 10;
+
+        set_yaw_solver_horizon(MIN_HORIZON);
     }
 
     void Planner::setup_pitch_solver()
     {
-        auto max_pitch_acc = 100;
-        Eigen::MatrixXd A{ {1, DT}, {0, 1} };
-        Eigen::MatrixXd B{ {0}, {DT} };
-        Eigen::VectorXd f{ {0, 0} };
-        Eigen::Matrix<double, 2, 1> Q(9e6, 0);
-        Eigen::Matrix<double, 1, 1> R(1);
-        tiny_setup(&m_pitch_solver, A, B, f, Q.asDiagonal(), R.asDiagonal(), 1.0, 2, 1, HORIZON, 0);
-
-        Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, HORIZON, -1e17);
-        Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, HORIZON, 1e17);
-        Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, HORIZON - 1, -max_pitch_acc);
-        Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, HORIZON - 1, max_pitch_acc);
-        tiny_set_bound_constraints(m_pitch_solver, x_min, x_max, u_min, u_max);
+        tiny_setup(&m_pitch_solver, m_A, m_B, m_f, m_Q.asDiagonal(), m_R.asDiagonal(), 1.0, 2, 1, MIN_HORIZON, 0);
 
         m_pitch_solver->settings->max_iter = 10;
+
+        set_pitch_solver_horizon(MIN_HORIZON);
+    }
+
+    void Planner::set_solver_horizon(int horizon) {
+        set_yaw_solver_horizon(horizon);
+        set_pitch_solver_horizon(horizon);
+    }
+
+    void Planner::set_yaw_solver_horizon(int horizion) {
+        horizion = (0 == horizion % 2) ? horizion : horizion + 1;
+        horizion = (horizion > MIN_HORIZON) ? horizion : MIN_HORIZON;
+
+        Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, horizion, -1e17);
+        Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, horizion, 1e17);
+        Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, horizion - 1, -MAX_YAW_ACC);
+        Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, horizion - 1, MAX_YAW_ACC);
+        tiny_set_bound_constraints(m_yaw_solver, x_min, x_max, u_min, u_max);
+    }
+
+    void Planner::set_pitch_solver_horizon(int horizion) {
+        horizion = (0 == horizion % 2) ? horizion : horizion + 1;
+        horizion = (horizion > MIN_HORIZON) ? horizion : MIN_HORIZON;
+
+        Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, horizion, -1e17);
+        Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, horizion, 1e17);
+        Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, horizion - 1, -MAX_PITCH_ACC);
+        Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, horizion - 1, MAX_PITCH_ACC);
+        tiny_set_bound_constraints(m_pitch_solver, x_min, x_max, u_min, u_max);
     }
 
     Planner::Plan Planner::get_plan() {
@@ -86,22 +97,22 @@ namespace ckyf::auto_aim {
         x0 << traj(0, 0), traj(1, 0);
         tiny_set_x0(m_yaw_solver, x0);
 
-        m_yaw_solver->work->Xref = traj.block(0, 0, 2, HORIZON);
+        m_yaw_solver->work->Xref = traj.block(0, 0, 2, MIN_HORIZON);
         tiny_solve(m_yaw_solver);
 
         // 4. Solve pitch
         x0 << traj(2, 0), traj(3, 0);
         tiny_set_x0(m_pitch_solver, x0);
 
-        m_pitch_solver->work->Xref = traj.block(2, 0, 2, HORIZON);
+        m_pitch_solver->work->Xref = traj.block(2, 0, 2, MIN_HORIZON);
         tiny_solve(m_pitch_solver);
 
         // plan.target_yaw = limit_rad(traj(0, HALF_HORIZON) + yaw0);
         // plan.target_pitch = traj(2, HALF_HORIZON);
-        double yaw = limit_rad(m_yaw_solver->work->x(0, HALF_HORIZON) + yaw0);
+        double yaw = limit_rad(m_yaw_solver->work->x(0, MIN_HALF_HORIZON) + yaw0);
         // plan.yaw_vel = yaw_solver_->work->x(1, HALF_HORIZON);
         // plan.yaw_acc = yaw_solver_->work->u(0, HALF_HORIZON);
-        double pitch = m_pitch_solver->work->x(0, HALF_HORIZON);
+        double pitch = m_pitch_solver->work->x(0, MIN_HALF_HORIZON);
         // plan.pitch_vel = pitch_solver_->work->x(1, HALF_HORIZON);
         // plan.pitch_acc = pitch_solver_->work->u(0, HALF_HORIZON);
 
@@ -122,7 +133,7 @@ namespace ckyf::auto_aim {
     {
         Trajectory traj;
 
-        m_target_predictor.predict(-DT * (HALF_HORIZON + 1));
+        m_target_predictor.predict(-DT * (MIN_HALF_HORIZON + 1));
         auto armor_xyz = m_target_predictor.nearest_armor_xyz();
 
         auto [yaw_last, pitch_last] = aim(armor_xyz);
@@ -131,7 +142,7 @@ namespace ckyf::auto_aim {
         armor_xyz = m_target_predictor.nearest_armor_xyz();
         auto [yaw, pitch] = aim(armor_xyz);
 
-        for (int i = 0; i < HORIZON; i++) {
+        for (int i = 0; i < MIN_HORIZON; i++) {
             m_target_predictor.predict(DT);
             armor_xyz = m_target_predictor.nearest_armor_xyz();
             auto [yaw_next, pitch_next] = aim(armor_xyz);
