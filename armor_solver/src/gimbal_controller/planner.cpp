@@ -131,7 +131,7 @@ namespace ckyf::auto_aim {
         // plan.pitch_vel = pitch_solver_->work->x(1, HALF_HORIZON);
         // plan.pitch_acc = pitch_solver_->work->u(0, HALF_HORIZON);
 
-        auto shoot_offset_ = 2;
+        // auto shoot_offset_ = 2;
         // plan.fire =
         //     std::hypot(
         //         traj(0, HALF_HORIZON + shoot_offset_) - yaw_solver_->work->x(0, HALF_HORIZON + shoot_offset_),
@@ -147,11 +147,10 @@ namespace ckyf::auto_aim {
     Planner::Trajectory Planner::get_trajectory(const double yaw0)
     {
         const int horizon = std::max(m_current_yaw_horizon, m_current_pitch_horizon);
-        const int half_horizon = horizon / 2;
 
         Trajectory traj = Eigen::MatrixXd::Zero(4, horizon);
 
-        m_target_predictor.predict(-DT * (half_horizon + 1));
+        m_target_predictor.predict(-DT);
         auto armor_xyz = m_target_predictor.nearest_armor_xyz();
 
         auto [yaw_last, pitch_last] = aim(armor_xyz);
