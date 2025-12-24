@@ -2,7 +2,7 @@
 #define _TARGET_PREDICTOR_HPP_
 
 //
-#include "armor_solver_common.h"
+#include "armor_solver/armor_solver_common.h"
 
 // std
 #include <tuple>

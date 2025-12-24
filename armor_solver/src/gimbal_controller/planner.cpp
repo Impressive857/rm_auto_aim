@@ -1,4 +1,4 @@
-#include "planner.hpp"
+#include "armor_solver/gimbal_controller/planner.hpp"
 
 namespace ckyf::auto_aim {
 

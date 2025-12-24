@@ -30,11 +30,11 @@ namespace ckyf
     {
         constexpr double PI = 3.141592653589793;
 
-        constexpr double rad2degree(const double rad) {
+        static constexpr double rad2degree(const double rad) {
             return rad * 180 / PI;
         }
 
-        constexpr double degree2rad(const double degree) {
+        static constexpr double degree2rad(const double degree) {
             return degree * PI / 180;
         }
 
@@ -85,7 +85,7 @@ namespace ckyf
             std::string id;
         };
 
-        double limit_rad(double angle) {
+        static double limit_rad(double angle) {
             while (angle > PI) angle -= 2 * PI;
             while (angle <= -PI) angle += 2 * PI;
             return angle;

@@ -45,7 +45,7 @@ namespace ckyf::auto_aim
         state = TRACKING_ARMOR;
         overflow_count_ = 0;
 
-        planner.init();
+        m_planner.init();
     }
 
 

@@ -18,7 +18,7 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
                                        "1", "2", "3", "4", "sentry", "outpost", "base"
                                    }));
     //深度补偿
-    this->declare_parameter("depth_compensation.k",0.214371);
+    this->declare_parameter("depth_compensation.k",0.054371);
     this->declare_parameter("depth_compensation.b",-0.048);
     this->declare_parameter("height_compensation.k",0.023);
     this->declare_parameter("height_compensation.b",0.0);
@@ -97,7 +97,9 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
     //外部目标建议
     this->declare_parameter("adviser.drop_time",5.0);
 
-
+    this->declare_parameter("robot.plan_R",1.0);
+    this->declare_parameter("planner.plan_Q(0)",1e3);
+    this->declare_parameter("planner.plan_Q(1)",10);
     FYT_INFO("armor_solver_param", "All parameters declared");
 }
 

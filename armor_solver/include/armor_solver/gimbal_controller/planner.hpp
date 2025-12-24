@@ -2,13 +2,13 @@
 #define _PLANNER_HPP_
 
 //
-#include "armor_solver_common.h"
+#include "armor_solver/armor_solver_common.h"
 #include "target_predictor.hpp"
 #include "clock/clock.h"
 #include "parameter/parameter.h"
 
 // 3rdparty
-#include "tinympc/tiny_api.hpp"
+#include "armor_solver/tinympc/tiny_api.hpp"
 
 // ros
 
