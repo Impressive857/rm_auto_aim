@@ -28,6 +28,16 @@ namespace ckyf
 {
     namespace auto_aim
     {
+        constexpr double PI = 3.141592653589793;
+
+        constexpr double rad2degree(const double rad) {
+            return rad * 180 / PI;
+        }
+
+        constexpr double degree2rad(const double degree) {
+            return degree * PI / 180;
+        }
+
         enum class StrategyMode
         {
             Discretionary, //自瞄自主决定
@@ -56,11 +66,10 @@ namespace ckyf
                 return "Shutdown";
             case StrategyMode::Invalid:
                 return "Invalid";
-                default:
+            default:
                 return "Error";
             }
         }
-
 
         struct ArmorGroup
         {
@@ -75,6 +84,12 @@ namespace ckyf
             bool has_target;
             std::string id;
         };
+
+        double limit_rad(double angle) {
+            while (angle > PI) angle -= 2 * PI;
+            while (angle <= -PI) angle += 2 * PI;
+            return angle;
+        }
     }
 }
 #endif //ARMOR_SOLVER_COMMON_H

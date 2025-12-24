@@ -1,6 +1,9 @@
 #ifndef _TARGET_PREDICTOR_HPP_
 #define _TARGET_PREDICTOR_HPP_
 
+//
+#include "armor_solver_common.h"
+
 // std
 #include <tuple>
 #include <numeric>
@@ -23,6 +26,7 @@ namespace ckyf
         auto square_sum_sqrt(const _Args... args) {
             return std::sqrt(square_sum(args...));
         }
+
         class TargetPredictor {
         public:
             TargetPredictor();
@@ -40,14 +44,12 @@ namespace ckyf
             bool has_target() const;
             ~TargetPredictor() = default;
         private:
-            double limit_rad(double angle) const;
             std::tuple<double, double, double> cal_armor_xyz(const size_t idx) const;
             std::tuple<double, double, double, double> cal_armor_xyza(const size_t idx) const;
         private:
             size_t m_armor_num;
             bool m_has_target;
-            Eigen::VectorXd m_X;
-            const double PI = 3.1415926;
+            Eigen::VectorXd m_x;
         };
     }
 }

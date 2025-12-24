@@ -44,47 +44,11 @@ namespace ckyf::auto_aim
             manual_compensator_ = std::make_unique<fyt::ManualCompensator>();
         state = TRACKING_ARMOR;
         overflow_count_ = 0;
-        setup_yaw_solver();
-        setup_pitch_solver();
+
+        planner.init();
     }
 
-    void Controller::setup_yaw_solver()
-    {
-        auto max_yaw_acc = 50;
-        Eigen::MatrixXd A{ {1, DT}, {0, 1} };
-        Eigen::MatrixXd B{ {0}, {DT} };
-        Eigen::VectorXd f{ {0, 0} };
-        Eigen::Matrix<double, 2, 1> Q(9e6, 0.0);
-        Eigen::Matrix<double, 1, 1> R(1);
-        tiny_setup(&yaw_solver_, A, B, f, Q.asDiagonal(), R.asDiagonal(), 1.0, 2, 1, HORIZON, 0);
 
-        Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, HORIZON, -1e17);
-        Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, HORIZON, 1e17);
-        Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, HORIZON - 1, -max_yaw_acc);
-        Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, HORIZON - 1, max_yaw_acc);
-        tiny_set_bound_constraints(yaw_solver_, x_min, x_max, u_min, u_max);
-
-        yaw_solver_->settings->max_iter = 10;
-    }
-
-    void Controller::setup_pitch_solver()
-    {
-        auto max_pitch_acc = 100;
-        Eigen::MatrixXd A{ {1, DT}, {0, 1} };
-        Eigen::MatrixXd B{ {0}, {DT} };
-        Eigen::VectorXd f{ {0, 0} };
-        Eigen::Matrix<double, 2, 1> Q(9e6, 0);
-        Eigen::Matrix<double, 1, 1> R(1);
-        tiny_setup(&pitch_solver_, A, B, f, Q.asDiagonal(), R.asDiagonal(), 1.0, 2, 1, HORIZON, 0);
-
-        Eigen::MatrixXd x_min = Eigen::MatrixXd::Constant(2, HORIZON, -1e17);
-        Eigen::MatrixXd x_max = Eigen::MatrixXd::Constant(2, HORIZON, 1e17);
-        Eigen::MatrixXd u_min = Eigen::MatrixXd::Constant(1, HORIZON - 1, -max_pitch_acc);
-        Eigen::MatrixXd u_max = Eigen::MatrixXd::Constant(1, HORIZON - 1, max_pitch_acc);
-        tiny_set_bound_constraints(pitch_solver_, x_min, x_max, u_min, u_max);
-
-        pitch_solver_->settings->max_iter = 10;
-    }
     void Controller::setOffset(const Offset& offset)
     {
         offset_ = offset;
@@ -351,11 +315,11 @@ namespace ckyf::auto_aim
         }
         }
 
-
         gimbal_cmd.yaw = cmd_yaw * 180 / M_PI;
         gimbal_cmd.pitch = cmd_pitch * 180 / M_PI;
-        auto [plan_yaw, plan_pitch] = get_plan();
-        gimbal_cmd.tj_yaw = plan_yaw;
+
+        Planner::Plan plan = m_planner.get_plan();
+        gimbal_cmd.tj_yaw = plan.yaw;
         gimbal_cmd.yaw_diff = (cmd_yaw - rpy_[2]) * 180 / M_PI;
         gimbal_cmd.pitch_diff = (cmd_pitch - rpy_[1]) * 180 / M_PI;
         real_yaw = real_yaw * 180.0 / M_PI;
@@ -555,146 +519,4 @@ namespace ckyf::auto_aim
         cosTheta_ = maxcosTheta;
         return argmax;
     }
-    std::pair<double, double> Controller::get_plan()
-    {
-
-        // 1. Predict fly_time
-        double dist = target_predictor_.nearest_armor_dist_2d();
-        auto [target_x, target_y, target_z, target_yaw] = target_predictor_.target_xyza();
-        //FYT_INFO("armor_solver", "dist 2d : {:.2f}", std::sqrt(target_x * target_x + target_y * target_y));
-        double bullet_speed = trajectory_compensator_->velocity;
-        if (bullet_speed < 10 || bullet_speed > 25) {
-            bullet_speed = 22;
-        }
-        auto bullet_traj_opt = trajectory(bullet_speed, dist, target_z);
-        if (!bullet_traj_opt.has_value()) {
-            FYT_ERROR("armor_solver", "Can't solve bullet");
-            return {};
-        }
-        auto [bullet_pitch, bullet_fly_time] = *bullet_traj_opt;
-        target_predictor_.predict(bullet_fly_time);
-        auto armor_xyz = target_predictor_.nearest_armor_xyz();
-
-        // 2. Get trajectory
-        double yaw0 = 0;
-        Trajectory traj;
-        try {
-            yaw0 = aim(armor_xyz)(0);
-            traj = get_trajectory(yaw0);
-        }
-        catch (const std::exception& e) {
-            FYT_ERROR("armor_solver", "Unsolvable target {:.2f}", bullet_speed);
-            return {};
-        }
-
-        // 3. Solve yaw
-        Eigen::VectorXd x0(2);
-        x0 << traj(0, 0), traj(1, 0);
-        tiny_set_x0(yaw_solver_, x0);
-
-        yaw_solver_->work->Xref = traj.block(0, 0, 2, HORIZON);
-        tiny_solve(yaw_solver_);
-
-        // 4. Solve pitch
-        x0 << traj(2, 0), traj(3, 0);
-        tiny_set_x0(pitch_solver_, x0);
-
-        pitch_solver_->work->Xref = traj.block(2, 0, 2, HORIZON);
-        tiny_solve(pitch_solver_);
-
-        // plan.target_yaw = limit_rad(traj(0, HALF_HORIZON) + yaw0);
-        // plan.target_pitch = traj(2, HALF_HORIZON);
-        double yaw = limit_rad(yaw_solver_->work->x(0, HALF_HORIZON) + yaw0);
-        // plan.yaw_vel = yaw_solver_->work->x(1, HALF_HORIZON);
-        // plan.yaw_acc = yaw_solver_->work->u(0, HALF_HORIZON);
-        double pitch = pitch_solver_->work->x(0, HALF_HORIZON);
-        // plan.pitch_vel = pitch_solver_->work->x(1, HALF_HORIZON);
-        // plan.pitch_acc = pitch_solver_->work->u(0, HALF_HORIZON);
-
-        auto shoot_offset_ = 2;
-        // plan.fire =
-        //     std::hypot(
-        //         traj(0, HALF_HORIZON + shoot_offset_) - yaw_solver_->work->x(0, HALF_HORIZON + shoot_offset_),
-        //         traj(2, HALF_HORIZON + shoot_offset_) -
-        //         pitch_solver_->work->x(0, HALF_HORIZON + shoot_offset_)) < (1 / frequency_);
-        return { yaw * 180.0 / M_PI, pitch * 180.0 / M_PI };
-    }
-    double Controller::limit_rad(double angle)
-    {
-        while (angle > CV_PI) angle -= 2 * CV_PI;
-        while (angle <= -CV_PI) angle += 2 * CV_PI;
-        return angle;
-    }
-    std::optional<std::pair<double, double>> Controller::trajectory(const double v0, const double d, const double h)
-    {
-        constexpr double g = 9.7833;
-        auto a = g * d * d / (2 * v0 * v0);
-        auto b = -d;
-        auto c = a + h;
-        auto delta = b * b - 4 * a * c;
-
-        if (delta < 0) {
-            std::cout << "d:" << d << "v0:" << v0 << "h:" << h << std::endl;
-            return std::nullopt;
-        }
-
-        auto tan_pitch_1 = (-b + std::sqrt(delta)) / (2 * a);
-        auto tan_pitch_2 = (-b - std::sqrt(delta)) / (2 * a);
-        auto pitch_1 = std::atan(tan_pitch_1);
-        auto pitch_2 = std::atan(tan_pitch_2);
-        auto t_1 = d / (v0 * std::cos(pitch_1));
-        auto t_2 = d / (v0 * std::cos(pitch_2));
-
-        double pitch = (t_1 < t_2) ? pitch_1 : pitch_2;
-        double fly_time = (t_1 < t_2) ? t_1 : t_2;
-
-        return std::pair<double, double>{ pitch, fly_time };
-    }
-
-    Eigen::Matrix<double, 2, 1> Controller::aim(const std::tuple<double, double, double>& target_xyz)
-    {
-        double bullet_speed = trajectory_compensator_->velocity;
-        auto [x, y, z] = target_xyz;
-        double dist = sqrt(x * x + y * y);
-
-        auto azim = std::atan2(y, x);
-        auto bullet_traj_opt = trajectory(bullet_speed, dist, z);
-        if (!bullet_traj_opt.has_value()) throw std::runtime_error("Unsolvable bullet trajectory!");
-
-        auto [bullet_pitch, bullet_fly_time] = *bullet_traj_opt;
-
-        return { limit_rad(azim + yaw_offset_), -bullet_pitch - pitch_offset_ };
-    }
-
-
-    Trajectory Controller::get_trajectory(const double yaw0)
-    {
-        Trajectory traj;
-
-        target_predictor_.predict(-DT * (HALF_HORIZON + 1));
-        auto armor_xyz = target_predictor_.nearest_armor_xyz();
-
-        auto yaw_pitch_last = aim(armor_xyz);
-
-        target_predictor_.predict(DT);  // [0] = -HALF_HORIZON * DT -> [HHALF_HORIZON] = 0
-        armor_xyz = target_predictor_.nearest_armor_xyz();
-        auto yaw_pitch = aim(armor_xyz);
-
-        for (int i = 0; i < HORIZON; i++) {
-            target_predictor_.predict(DT);
-            armor_xyz = target_predictor_.nearest_armor_xyz();
-            auto yaw_pitch_next = aim(armor_xyz);
-
-            auto yaw_vel = limit_rad(yaw_pitch_next(0) - yaw_pitch_last(0)) / (2 * DT);
-            auto pitch_vel = (yaw_pitch_next(1) - yaw_pitch_last(1)) / (2 * DT);
-
-            traj.col(i) << limit_rad(yaw_pitch(0) - yaw0), yaw_vel, yaw_pitch(1), pitch_vel;
-
-            yaw_pitch_last = yaw_pitch;
-            yaw_pitch = yaw_pitch_next;
-        }
-
-        return traj;
-    }
 }
-

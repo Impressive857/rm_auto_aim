@@ -26,16 +26,12 @@
 #include <rm_interfaces/msg/point2d.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include "armor_solver/tinympc/tiny_api.hpp"
+#include "planner.hpp"
 
 namespace ckyf
 {
     namespace auto_aim
     {
-        constexpr double DT = 0.01;
-        constexpr int HALF_HORIZON = 50;
-        constexpr int HORIZON = HALF_HORIZON * 2;
-        using Trajectory = Eigen::Matrix<double, 4, HORIZON>;
         class Controller
         {
         public:
@@ -78,8 +74,7 @@ namespace ckyf
             Controller();
             ~Controller() = default;
             void init();
-            void setup_yaw_solver();
-            void setup_pitch_solver();
+
 
             void registerGimbalCmdPub(std::function<void(rm_interfaces::msg::GimbalCmd)> publish_GimbalCmd_);
 
@@ -100,11 +95,6 @@ namespace ckyf
             void setOffset(const Offset& offset);
             void setThreshold(const Threshold& threshold);
             void update_operator_offset(const rm_interfaces::msg::Point2d& operator_offset);
-            const Eigen::Vector3d target_xyz() const;
-            const double target_distance2d() const;
-            const double target_distance3d() const;
-            double limit_rad(double angle);
-
 
             void linkKalmanPool(std::shared_ptr<KalmanPool> kalman_pool) { kalman_pool_ = kalman_pool; }
 
@@ -115,9 +105,6 @@ namespace ckyf
             ckyf::auto_aim::TargetPredictor target_predictor_;
             std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
             std::unique_ptr<tf2_ros::TransformListener> tf2_listener_;
-
-            TinySolver* yaw_solver_;
-            TinySolver* pitch_solver_;
 
             //目标选择
             TargetAdviser* adviser_{ nullptr };
@@ -153,9 +140,7 @@ namespace ckyf
 
             double last_cmd_yaw_;
 
-            double yaw_offset_;
-            double pitch_offset_;
-
+            Planner m_planner;
 
             //判断准心与目标重合度
             [[nodiscard]] bool isOnTarget(double cur_yaw,
@@ -192,11 +177,6 @@ namespace ckyf
                 double r2,
                 double d_height,
                 size_t armors_num) noexcept;
-            std::pair<double, double> get_plan();
-            Eigen::Matrix<double, 2, 1> aim(const std::tuple<double,double,double>& target_xyz);
-            std::optional<std::pair<double, double>> trajectory(const double v0, const double d, const double h);
-            Trajectory get_trajectory(const double yaw0);
-
         };
 
         inline void Controller::registerGimbalCmdPub(
