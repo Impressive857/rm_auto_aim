@@ -97,7 +97,7 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
     //外部目标建议
     this->declare_parameter("adviser.drop_time",5.0);
 
-    this->declare_parameter("robot.plan_R",1.0);
+    this->declare_parameter("planner.plan_R",1.0);
     this->declare_parameter("planner.plan_Q(0)",1e3);
     this->declare_parameter("planner.plan_Q(1)",10);
     FYT_INFO("armor_solver_param", "All parameters declared");

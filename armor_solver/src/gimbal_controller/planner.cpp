@@ -14,7 +14,14 @@ namespace ckyf::auto_aim {
         setup_yaw_solver();
         setup_pitch_solver();
 
+        double Q_0, Q_1, R;
         global_node::Parameter->get_parameter("solver.bullet_speed", m_bullet_speed);
+        global_node::Parameter->get_parameter("planner.plan_Q(0)", Q_0);
+        global_node::Parameter->get_parameter("planner.plan_Q(1)", Q_1);
+        global_node::Parameter->get_parameter("planner.plan_R", R);
+
+        m_Q << Q_0, Q_1;
+        m_R << R;
     }
 
     bool Planner::set_target(const rm_interfaces::msg::Target& target) {

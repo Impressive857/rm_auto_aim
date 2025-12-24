@@ -42,8 +42,8 @@ namespace ckyf {
             void setup_yaw_solver();
             void setup_pitch_solver();
             void set_solver_horizon(int horizion);
-            void Planner::set_yaw_solver_horizon(int horizion);
-            void Planner::set_pitch_solver_horizon(int horizion);
+            void set_yaw_solver_horizon(int horizion);
+            void set_pitch_solver_horizon(int horizion);
             Trajectory get_trajectory(const double yaw0);
             std::optional<std::pair<double, double>> trajectory(const double v0, const double d, const double h);
             std::pair<double, double> aim(const std::tuple<double, double, double>& target_xyz);
@@ -57,8 +57,8 @@ namespace ckyf {
             const Eigen::MatrixXd m_A{ {1, DT}, {0, 1} };
             const Eigen::MatrixXd m_B{ {0}, {DT} };
             const Eigen::VectorXd m_f{ {0, 0} };
-            const Eigen::Matrix<double, 2, 1> m_Q{ { 9e6 }, { 0 } };
-            const Eigen::Matrix<double, 1, 1> m_R{ {1} };
+            Eigen::Matrix<double, 2, 1> m_Q;
+            Eigen::Matrix<double, 1, 1> m_R;
         };
     }
 }
