@@ -52,8 +52,8 @@ namespace ckyf {
             TinySolver* m_yaw_solver;
             TinySolver* m_pitch_solver;
             TargetPredictor m_target_predictor;
-            int m_current_yaw_horizon;
-            int m_current_pitch_horizon;
+            int m_current_horizon;
+            int m_current_half_horizon;
             double m_yaw_offset;
             double m_pitch_offset;
             double m_bullet_speed;

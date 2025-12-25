@@ -83,7 +83,6 @@ namespace ckyf::auto_aim
         }
 
         target_ = kalman_pool_->predict(target_id);
-        m_planner.set_target(target_);
         target_.header.frame_id = target_frame_;
         target_.header.stamp = global_node::Clock->time();
         //发送target和measurement
@@ -160,6 +159,12 @@ namespace ckyf::auto_aim
         target_pos.x() += vx * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.x;
         target_pos.y() += vy * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.y;
         target_pos.z() += vz * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.z;
+
+        rm_interfaces::msg::Target plan_target = target_;
+        plan_target.position.x = target_pos.x();
+        plan_target.position.y = target_pos.y();
+        plan_target.position.z = target_pos.z();
+        m_planner.set_target(plan_target);
 
         global_node::Visualization->debug_user.debug16 = vy * delay_tr + 0.5 * delay_tr * delay_tr * target_.
             acceleration.y;
