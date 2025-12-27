@@ -7,127 +7,131 @@ namespace ckyf::auto_aim
     TargetPredictor::TargetPredictor() {
         m_has_target = false;
         m_armor_num = 0;
-        m_x = Eigen::VectorXd::Zero(11);
     }
 
     TargetPredictor::TargetPredictor(const rm_interfaces::msg::Target& target) {
         set_target(target);
     }
 
+    void TargetPredictor::predict_xyz(double dt) {
+        target_pos_ += dt * target_v_;
+
+    }
+    void TargetPredictor::predict_yaw(double dt) {
+        target_yaw_ += dt * target_v_yaw_;
+        target_yaw_ = limit_rad(target_yaw_);
+    }
+
     void TargetPredictor::predict(double dt) {
-        m_x[0] += dt * m_x[1]; //  x  += dt * v_x
-        m_x[2] += dt * m_x[3]; //  y  += dt * v_x
-        m_x[4] += dt * m_x[5]; //  z  += dt * v_x
-        m_x[6] += dt * m_x[7]; // yaw += dt * v_yaw
-        m_x[6] = limit_rad(m_x[6]);
-    }
-
-    std::tuple<double, double, double> TargetPredictor::target_xyz() const {
-        return { m_x[0], m_x[2], m_x[4] };
-    }
-
-    std::tuple<double, double, double, double> TargetPredictor::target_xyza() const {
-        return { m_x[0], m_x[2], m_x[4], m_x[6] };
+        predict_xyz(dt);
+        predict_yaw(dt);
     }
 
     double TargetPredictor::target_dist_2d() const {
-        return square_sum_sqrt(m_x[0], m_x[2]);
+        return target_pos_.head<2>().norm();
     }
 
     double TargetPredictor::target_dist_3d() const {
-        return square_sum_sqrt(m_x[0], m_x[2], m_x[4]);
+        return target_pos_.head<3>().norm();
     }
 
     double TargetPredictor::nearest_armor_dist_2d() const {
-        auto [x, y, z] = nearest_armor_xyz();
-        return square_sum_sqrt(x, y);
+        return get_best_armor_position().head<2>().norm();
     }
 
     double TargetPredictor::nearest_armor_dist_3d() const {
-        auto [x, y, z] = nearest_armor_xyz();
-        return square_sum_sqrt(x, y, z);
+        return get_best_armor_position().head<3>().norm();
     }
 
-    bool TargetPredictor::set_target(const rm_interfaces::msg::Target& target) {
-        try {
-            double x = target.position.x;
-            double y = target.position.y;
-            double z = target.position.z;
+    void TargetPredictor::set_target(const rm_interfaces::msg::Target& target) {
+        target_pos_ << target.position.x, target.position.y, target.position.z;
 
-            double v_x = target.velocity.x;
-            double v_y = target.velocity.y;
-            double v_z = target.velocity.z;
+        target_v_ << target.velocity.x, target.velocity.y, target.velocity.z;
 
-            double yaw = target.yaw;
+        target_yaw_ = target.yaw;
 
-            double v_yaw = target.v_yaw;
+        target_v_yaw_ = target.v_yaw;
 
-            double radius = target.radius_2;
+        m_r1 = target.radius_1;
+        m_r2 = target.radius_2;
 
-            m_armor_num = static_cast<size_t>(target.armors_num);
+        m_armor_num = static_cast<size_t>(target.armors_num);
 
-            double l = target.radius_2 - target.radius_1;
-            double h = target.d_height;
+        m_d_height = target.d_height;
 
-            // x vx y vy z vz a w r l h
-            // a: angle
-            // w: angular velocity
-            // l: r2 - r1
-            // h: z2 - z1
-            Eigen::VectorXd X0{ {x, v_x, y, v_y, z, v_z, yaw, v_yaw, radius, l, h} };  //初始化预测量
-            m_x = X0;
-
-            m_has_target = true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << e.what() << std::endl;
-            return false;
-        }
-
-        return true;
-    }
-
-    std::tuple<double, double, double, double> TargetPredictor::cal_armor_xyza(const size_t idx) const {
-        if (0 > m_armor_num) throw std::invalid_argument("armor_num is zero!");
-        double yaw = limit_rad(m_x[6] + idx * 2 * PI / m_armor_num);
-        int use_l_h = (m_armor_num == 4) && (idx == 1 || idx == 3);
-
-        double r = (use_l_h) ? m_x[8] + m_x[9] : m_x[8];
-        double x = m_x[0] - r * std::cos(yaw);
-        double y = m_x[2] - r * std::sin(yaw);
-        double z = (use_l_h) ? m_x[4] + m_x[10] : m_x[4];
-        return { x, y, z, yaw };
-    }
-
-    // 计算出装甲板中心的坐标（考虑长短轴）
-    std::tuple<double, double, double> TargetPredictor::cal_armor_xyz(const size_t idx) const {
-        auto [x, y, z, yaw] = cal_armor_xyza(idx);
-        return { x,y,z };
-    }
-
-    std::tuple<double, double, double, double> TargetPredictor::nearest_armor_xyza() const {
-        double x, y, z, yaw;
-        double min_dist = std::numeric_limits<double>::max();
-        for (size_t i = 0; i < m_armor_num; ++i) {
-            auto [temp_x, temp_y, temp_z, temp_yaw] = cal_armor_xyza(i);
-            double temp_dist = square_sum_sqrt(temp_x, temp_y, temp_z);
-            if (temp_dist < min_dist) {
-                x = temp_x;
-                y = temp_y;
-                z = temp_z;
-                yaw = temp_yaw;
-                min_dist = temp_dist;
-            }
-        }
-        return { x,y,z,yaw };
-    }
-
-    std::tuple<double, double, double> TargetPredictor::nearest_armor_xyz() const {
-        auto [x, y, z, yaw] = nearest_armor_xyza();
-        return { x,y,z };
+        m_has_target = true;
     }
 
     bool TargetPredictor::has_target() const {
         return m_has_target;
+    }
+
+    Eigen::Vector3d TargetPredictor::get_best_armor_position() const noexcept
+    {
+        int i = get_armor_id();
+
+        double r = 0;
+        double target_dz = 0.;
+        double temp_yaw = target_yaw_ + i * (2 * PI / m_armor_num);
+        if (m_armor_num == 4)
+        {
+            bool is_current_pair = i % 2 == 0;
+            r = is_current_pair ? m_r1 : m_r2;
+            target_dz = is_current_pair ? 0 : m_d_height;
+        }
+        else
+        {
+            r = m_r1;
+            target_dz = 0;
+        }
+
+        return target_pos_ + Eigen::Vector3d(-r * cos(temp_yaw), -r * sin(temp_yaw), target_dz);
+    }
+
+    int TargetPredictor::get_armor_id() const noexcept
+    {
+        auto armor_positions = std::vector<Eigen::Vector3d>(m_armor_num, Eigen::Vector3d::Zero());
+        auto armors_vec = std::vector<Eigen::Vector2d>(m_armor_num, Eigen::Vector2d::Zero());
+        // Calculate the position of each armor
+        bool is_current_pair = true;
+        double r = 0., target_dz = 0.;
+        Eigen::Vector2d target_center(target_pos_.x(), target_pos_.y());
+        for (size_t i = 0; i < m_armor_num; i++)
+        {
+            double temp_yaw = target_yaw_ + i * (2 * PI / m_armor_num);
+            if (m_armor_num == 4)
+            {
+                r = is_current_pair ? m_r1 : m_r2;
+                target_dz = is_current_pair ? 0 : m_d_height;
+                is_current_pair = !is_current_pair;
+            }
+            else
+            {
+                r = m_r1;
+                target_dz = 0;
+            }
+            armor_positions[i] =
+                target_center + Eigen::Vector3d(-r * cos(temp_yaw), -r * sin(temp_yaw), target_dz);
+            Eigen::Vector2d armor_vec;
+            armor_vec << armor_positions[i](0) - target_center(0), armor_positions[i](1) - target_center(1);
+            armors_vec[i] = armor_vec;
+        }
+
+        Eigen::Vector2d center_vec;
+        center_vec << -target_center(0), -target_center(1);
+        double maxcosTheta = -2.0;
+        double argmax = 0;
+        for (int i = 0; i < m_armor_num; i++)
+        {
+            double cosTheta = center_vec.dot(armors_vec[i]) / center_vec.norm() / armors_vec[i].norm();
+            if (cosTheta > maxcosTheta)
+            {
+                argmax = i;
+                maxcosTheta = cosTheta;
+            }
+        }
+
+        // cosTheta_ = maxcosTheta;
+        return argmax;
     }
 }

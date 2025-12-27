@@ -38,6 +38,15 @@ namespace ckyf
             return degree * PI / 180;
         }
 
+        template <typename... _Args, typename = typename std::enable_if_t<(std::is_arithmetic_v<_Args> && ...)>>
+        static constexpr auto square_sum(const _Args... args) {
+            return ((args * args) + ...);
+        }
+        template <typename... _Args, typename = typename std::enable_if_t<(std::is_arithmetic_v<_Args> && ...)>>
+        static constexpr auto square_sum_sqrt(const _Args... args) {
+            return std::sqrt(square_sum(args...));
+        }
+
         enum class StrategyMode
         {
             Discretionary, //自瞄自主决定

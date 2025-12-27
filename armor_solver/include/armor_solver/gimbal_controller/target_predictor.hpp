@@ -5,7 +5,6 @@
 #include "armor_solver/armor_solver_common.h"
 
 // std
-#include <tuple>
 #include <numeric>
 
 // ros
@@ -18,38 +17,34 @@ namespace ckyf
 {
     namespace auto_aim
     {
-        template <typename... _Args, typename = typename std::enable_if_t<(std::is_arithmetic_v<_Args> && ...)>>
-        auto square_sum(const _Args... args) {
-            return ((args * args) + ...);
-        }
-        template <typename... _Args, typename = typename std::enable_if_t<(std::is_arithmetic_v<_Args> && ...)>>
-        auto square_sum_sqrt(const _Args... args) {
-            return std::sqrt(square_sum(args...));
-        }
-
         class TargetPredictor {
         public:
             TargetPredictor();
             TargetPredictor(const rm_interfaces::msg::Target& target);
+            void predict_xyz(double dt);
+            void predict_yaw(double dt);
             void predict(double dt);
             double target_dist_2d() const;
             double target_dist_3d() const;
             double nearest_armor_dist_2d() const;
             double nearest_armor_dist_3d() const;
-            std::tuple<double, double, double> target_xyz() const;
-            std::tuple<double, double, double, double> target_xyza() const;
-            std::tuple<double, double, double> nearest_armor_xyz() const;
-            std::tuple<double, double, double, double> nearest_armor_xyza() const;
-            bool set_target(const rm_interfaces::msg::Target& target);
+            Eigen::Vector3d TargetPredictor::get_best_armor_position() const noexcept;
+            void set_target(const rm_interfaces::msg::Target& target);
             bool has_target() const;
             ~TargetPredictor() = default;
+        public:
+            Eigen::Vector3d target_pos_;
+            Eigen::Vector3d target_v_;
+            double target_yaw_;
+            double target_v_yaw_;
         private:
-            std::tuple<double, double, double> cal_armor_xyz(const size_t idx) const;
-            std::tuple<double, double, double, double> cal_armor_xyza(const size_t idx) const;
+            int get_armor_id() const noexcept;
         private:
+            double m_r1;
+            double m_r2;
+            double m_d_height;
             size_t m_armor_num;
             bool m_has_target;
-            Eigen::VectorXd m_x;
         };
     }
 }
