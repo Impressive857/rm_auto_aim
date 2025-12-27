@@ -4,3 +4,4 @@ install/
 log/
 cmake-build-debug/
 *.back
+.idea/
