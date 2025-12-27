@@ -33,6 +33,22 @@ namespace ckyf::auto_aim {
         m_trajectory_compensator->gravity = 9.8;
         m_trajectory_compensator->resistance = 0.001;
 
+        global_node::Parameter->get_parameter("solver.controller_delay", m_delay.control_delay);
+        global_node::Parameter->get_parameter("solver.prediction_delay", m_delay.prediction_delay);
+        global_node::Parameter->get_parameter("solver.response_delay", m_delay.response_delay);
+        global_node::Parameter->get_parameter("solver.trigger_delay", m_delay.trigger_delay);
+        global_node::Parameter->get_parameter("solver.command_delay", m_delay.command_delay);
+
+        global_node::Parameter->get_parameter("solver.max_tracking_v_yaw", m_threshold.max_tracking_v_yaw);
+        global_node::Parameter->get_parameter("solver.min_switching_v_yaw", m_threshold.min_switching_v_yaw);
+        global_node::Parameter->get_parameter("solver.side_angle", m_threshold.side_angle);
+        global_node::Parameter->get_parameter("solver.shoot_threshold", m_threshold.shooting_threshold);
+        m_threshold.transfer_thresh = 5;
+        global_node::Parameter->get_parameter("solver.shooting_range_width", m_threshold.shooting_range_h);
+        global_node::Parameter->get_parameter("solver.shooting_range_height", m_threshold.shooting_range_w);
+        global_node::Parameter->get_parameter("solver.shooting_range_large_width", m_threshold.shooting_range_large_w);
+        global_node::Parameter->get_parameter("solver.shooting_range_large_height", m_threshold.shooting_range_large_h);
+
         if (nullptr == m_manual_compensator)
             m_manual_compensator = std::make_unique<fyt::ManualCompensator>();
 
