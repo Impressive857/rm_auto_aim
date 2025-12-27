@@ -155,7 +155,6 @@ namespace ckyf::auto_aim
         double target_yaw = target_.yaw + v_yaw * delay;
         double delay_tr = delay + delay_.response_delay;
 
-
         target_pos.x() += vx * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.x;
         target_pos.y() += vy * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.y;
         target_pos.z() += vz * delay_tr + 0.5 * delay_tr * delay_tr * target_.acceleration.z;

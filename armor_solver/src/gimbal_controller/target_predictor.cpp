@@ -95,7 +95,7 @@ namespace ckyf::auto_aim
         // Calculate the position of each armor
         bool is_current_pair = true;
         double r = 0., target_dz = 0.;
-        Eigen::Vector2d target_center(target_pos_.x(), target_pos_.y());
+        Eigen::Vector3d target_center(target_pos_.x(), target_pos_.y(),target_pos_.z());
         for (size_t i = 0; i < m_armor_num; i++)
         {
             double temp_yaw = target_yaw_ + i * (2 * PI / m_armor_num);

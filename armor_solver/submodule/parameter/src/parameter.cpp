@@ -99,7 +99,7 @@ void ckyf::parameter::ArmorSolverParam::declare_params()
 
     this->declare_parameter("planner.plan_R",1.0);
     this->declare_parameter("planner.plan_Q(0)",1e3);
-    this->declare_parameter("planner.plan_Q(1)",10);
+    this->declare_parameter("planner.plan_Q(1)",10.0);
     FYT_INFO("armor_solver_param", "All parameters declared");
 }
 

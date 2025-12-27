@@ -44,7 +44,7 @@ namespace ckyf::auto_aim {
         m_overflow_count = 0;
     }
 
-    void Planner::set_target(const rm_interfaces::msg::Target& target) {
+    void Planner::set_target(const rm_interfaces::msg::Target& target) noexcept {
         m_target_predictor.set_target(target);
     }
 

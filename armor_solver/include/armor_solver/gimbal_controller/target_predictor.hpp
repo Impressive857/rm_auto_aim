@@ -28,7 +28,7 @@ namespace ckyf
             double target_dist_3d() const;
             double nearest_armor_dist_2d() const;
             double nearest_armor_dist_3d() const;
-            Eigen::Vector3d TargetPredictor::get_best_armor_position() const noexcept;
+            Eigen::Vector3d get_best_armor_position() const noexcept;
             void set_target(const rm_interfaces::msg::Target& target);
             bool has_target() const;
             ~TargetPredictor() = default;
