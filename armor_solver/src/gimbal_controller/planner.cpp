@@ -58,6 +58,8 @@ namespace ckyf::auto_aim {
         m_track_mode = TrackMode::TRACK_ARMOR;
 
         m_overflow_count = 0;
+
+        m_yaw_last = std::numeric_limits<double>::min();
     }
 
     void Planner::set_target(const rm_interfaces::msg::Target& target) noexcept {
@@ -219,6 +221,12 @@ namespace ckyf::auto_aim {
                 std::cout << m_yaw_solver->work->x(0, i) << " ";
             }
         }
+
+        if (yaw < m_yaw_last && yaw < yaw_0) {
+            yaw = m_yaw_last;
+        }
+
+        m_yaw_last = yaw;
 
         Plan plan{
             .yaw = rad2degree(yaw),
