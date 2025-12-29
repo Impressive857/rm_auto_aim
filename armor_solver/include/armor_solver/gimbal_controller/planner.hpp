@@ -8,6 +8,7 @@
 #include "parameter/parameter.h"
 #include <rm_utils/math/trajectory_compensator.hpp>
 #include <rm_utils/math/manual_compensator.hpp>
+#include "sg_filter.hpp"
 
 
 // 3rdparty
@@ -80,6 +81,7 @@ namespace ckyf {
             TinySolver* m_yaw_solver;
             TinySolver* m_pitch_solver;
             TargetPredictor m_target_predictor;
+            SGFilter m_SG_filter;
             int m_overflow_count;
             TrackMode m_track_mode;
             Delay m_delay;
