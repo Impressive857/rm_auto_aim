@@ -183,8 +183,8 @@ namespace ckyf::auto_aim {
 
         Trajectory traj = get_trajectory(yaw_0);
 
-        traj.row(0) = m_SG_filter.savgol_filter(traj.row(0), 9, 3);
-        traj.row(1) = m_SG_filter.savgol_filter(traj.row(1), 9, 3);
+        traj.row(0) = m_SG_filter.smooth(traj.row(0), 9, 3);
+        traj.row(1) = m_SG_filter.smooth(traj.row(1), 9, 3);
 
         Eigen::VectorXd x0(2);
         x0 << traj(0, 0), traj(1, 0);
