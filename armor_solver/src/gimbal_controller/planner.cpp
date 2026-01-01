@@ -185,8 +185,8 @@ namespace ckyf::auto_aim {
 
         Trajectory traj = get_trajectory(yaw_0);
 
-        traj.row(0) = m_SG_filter.smooth(traj.row(0), 9, 3);
-        traj.row(1) = m_SG_filter.smooth(traj.row(1), 9, 3);
+        // traj.row(0) = m_SG_filter.smooth(traj.row(0), 9, 3);
+        // traj.row(1) = m_SG_filter.smooth(traj.row(1), 9, 3);
 
         Eigen::VectorXd x0(2);
         x0 << traj(0, 0), traj(1, 0);
@@ -216,21 +216,20 @@ namespace ckyf::auto_aim {
         //         traj(0, HALF_HORIZON + shoot_offset_) - yaw_solver_->work->x(0, HALF_HORIZON + shoot_offset_),
         //         traj(2, HALF_HORIZON + shoot_offset_) -
         //         pitch_solver_->work->x(0, HALF_HORIZON + shoot_offset_)) < (1 / frequency_);
-        if (std::abs(yaw - yaw_0) > degree2rad(10)) {
-            for (int i = 0;i < HORIZON;++i) {
-                std::cout << m_yaw_solver->work->x(0, i) << " ";
-            }
-        }
 
-        if (yaw < m_yaw_last && yaw < yaw_0) {
-            yaw = m_yaw_last;
-        }
+        traj = get_trajectory(yaw_0 + yaw_0);
 
-        m_yaw_last = yaw;
+        x0 << traj(0, 0), traj(1, 0);
+        tiny_set_x0(m_yaw_solver, x0);
+
+        m_yaw_solver->work->Xref = traj.block(0, 0, 2, HORIZON);
+        tiny_solve(m_yaw_solver);
+
+        double yaw_yaw0 = limit_rad(m_yaw_solver->work->x(0, HALF_HORIZON) + yaw_offset);
 
         Plan plan{
             .yaw = rad2degree(yaw),
-            .pitch = rad2degree(pitch)
+            .pitch = rad2degree(yaw_yaw0)
         };
         return plan;
     }

@@ -91,7 +91,6 @@ namespace ckyf {
             const Eigen::VectorXd m_f{ {0, 0} };
             Eigen::Matrix<double, 2, 1> m_Q;
             Eigen::Matrix<double, 1, 1> m_R;
-            double m_yaw_last;
         };
     }
 }
